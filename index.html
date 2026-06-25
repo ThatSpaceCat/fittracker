@@ -153,7 +153,8 @@
       <div style="display:flex;gap:6px">
         <button class="btn btn-sm btn-secondary" onclick="exportWorkout()">⬇</button>
         <label class="btn btn-sm btn-secondary" style="cursor:pointer;margin:0">⬆<input type="file" accept=".json" onchange="importWorkout(this)" style="display:none"></label>
-        <button class="btn btn-sm btn-primary" onclick="openWorkoutEditor(state.selectedWorkoutDay || 'Monday')">Edit</button>
+        <button class="btn btn-sm btn-secondary" onclick="openWorkoutDiscover()">✨</button>
+      <button class="btn btn-sm btn-primary" onclick="openWorkoutEditor(state.selectedWorkoutDay || 'Monday')">Edit</button>
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -193,9 +194,8 @@
   </div>
   <div style="display:flex;gap:8px;margin-bottom:12px">
     <button class="btn btn-secondary btn-sm w-full" onclick="exportMeals()">⬇ Export</button>
-    <label class="btn btn-secondary btn-sm w-full" style="text-align:center;cursor:pointer;margin:0">
-      ⬆ Import<input type="file" accept=".json" onchange="importMeals(this)" style="display:none">
-    </label>
+    <label class="btn btn-secondary btn-sm w-full" style="text-align:center;cursor:pointer;margin:0">⬆ Import<input type="file" accept=".json" onchange="importMeals(this)" style="display:none"></label>
+    <button class="btn btn-primary btn-sm w-full" onclick="openMealDiscover()">✨ Discover</button>
   </div>
   <div id="mealLibraryList"></div>
 </div>
@@ -258,6 +258,33 @@
     <button class="modal-close" onclick="closeModal('logWorkoutModal')">✕</button>
     <h2 id="logWorkoutTitle">Log Exercise</h2>
     <div id="logWorkoutContent"></div>
+  </div>
+</div>
+
+<!-- MEAL DISCOVER MODAL -->
+<div class="modal-overlay" id="mealDiscoverModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('mealDiscoverModal')">✕</button>
+    <h2>Discover Meals</h2>
+    <div id="mealDiscoverContent"></div>
+  </div>
+</div>
+
+<!-- MEAL PREVIEW MODAL -->
+<div class="modal-overlay" id="mealPreviewModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('mealPreviewModal')">✕</button>
+    <h2 id="mealPreviewTitle">Recipe Preview</h2>
+    <div id="mealPreviewContent"></div>
+  </div>
+</div>
+
+<!-- WORKOUT DISCOVER MODAL -->
+<div class="modal-overlay" id="workoutDiscoverModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('workoutDiscoverModal')">✕</button>
+    <h2>Discover Workouts</h2>
+    <div id="workoutDiscoverContent"></div>
   </div>
 </div>
 
@@ -1035,6 +1062,327 @@ function clearShoppingChecks() {
   state.shoppingChecked = {};
   save(); renderShopping();
   document.getElementById('shoppingListOutput').innerHTML = '';
+}
+
+// ─── MEAL DISCOVERY ───────────────────────────────────────────────────────────
+
+const MEAL_CATEGORIES = ['Beef','Chicken','Seafood','Vegetarian','Pasta','Breakfast','Dessert','Lamb','Pork','Side','Starter','Vegan','Goat','Miscellaneous'];
+
+function openMealDiscover() {
+  renderMealDiscoverHome();
+  openModal('mealDiscoverModal');
+}
+
+function renderMealDiscoverHome() {
+  const tot = getTotals(today());
+  const t = getTargets(today());
+  const remCal = t.calories - tot.cal;
+  const remP = t.protein - tot.protein;
+
+  document.getElementById('mealDiscoverContent').innerHTML = `
+    <div class="card" style="background:var(--bg);margin-bottom:12px">
+      <h3>Your Remaining Today</h3>
+      <div class="macro-chips mt-8">
+        <span class="chip chip-cal">${remCal > 0 ? remCal : 0} cal left</span>
+        <span class="chip chip-p">${remP > 0 ? remP : 0}g protein left</span>
+      </div>
+      <button class="btn btn-primary w-full mt-8" onclick="suggestByMacros()">🎯 Suggest Meals for My Macros</button>
+    </div>
+
+    <div class="section-title">Search Recipes</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="discoverSearch" placeholder="e.g. chicken, salmon, pasta..." style="flex:1;margin:0">
+      <button class="btn btn-primary btn-sm" onclick="searchMealDiscover()">Go</button>
+    </div>
+
+    <div class="section-title">Browse by Category</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+      ${MEAL_CATEGORIES.map(c => `<button class="btn btn-secondary btn-sm" onclick="fetchMealCategory('${c}')">${c}</button>`).join('')}
+    </div>
+
+    <div id="discoverResults"></div>`;
+}
+
+async function searchMealDiscover() {
+  const q = document.getElementById('discoverSearch').value.trim();
+  if (!q) return;
+  const el = document.getElementById('discoverResults');
+  el.innerHTML = '<div class="empty">Searching...</div>';
+  try {
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    renderDiscoverResults(data.meals || []);
+  } catch(e) { el.innerHTML = '<div class="empty">Offline — check connection</div>'; }
+}
+
+async function fetchMealCategory(cat) {
+  const el = document.getElementById('discoverResults');
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${encodeURIComponent(cat)}`);
+    const data = await res.json();
+    renderDiscoverResults((data.meals || []).slice(0, 20), true);
+  } catch(e) { el.innerHTML = '<div class="empty">Offline — check connection</div>'; }
+}
+
+function renderDiscoverResults(meals, summaryOnly) {
+  const el = document.getElementById('discoverResults');
+  if (!meals || meals.length === 0) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+  el.innerHTML = meals.map(m => `
+    <div class="meal-row" style="cursor:pointer" onclick="previewMeal('${m.idMeal}','${(m.strMeal||'').replace(/'/g,"\\'")}')">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+        ${m.strMealThumb ? `<img src="${m.strMealThumb}/preview" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">` : ''}
+        <div style="min-width:0">
+          <div class="meal-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.strMeal}</div>
+          ${m.strCategory ? `<div style="font-size:0.75rem;color:var(--muted)">${m.strCategory}${m.strArea ? ' · ' + m.strArea : ''}</div>` : ''}
+        </div>
+      </div>
+      <span style="color:var(--accent2);font-size:1.1rem;flex-shrink:0">›</span>
+    </div>`).join('');
+}
+
+async function previewMeal(id, name) {
+  document.getElementById('mealPreviewTitle').textContent = name;
+  document.getElementById('mealPreviewContent').innerHTML = '<div class="empty">Loading...</div>';
+  openModal('mealPreviewModal');
+  try {
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`);
+    const data = await res.json();
+    const meal = data.meals[0];
+    const ingredients = [];
+    for (let i = 1; i <= 20; i++) {
+      const ing = meal[`strIngredient${i}`];
+      const measure = meal[`strMeasure${i}`];
+      if (ing && ing.trim()) ingredients.push({ name: ing.trim(), measure: (measure || '').trim() });
+    }
+    const estimated = estimateMacrosFromIngredients(ingredients);
+    const alreadySaved = state.meals.some(m => m.name.toLowerCase() === meal.strMeal.toLowerCase());
+
+    document.getElementById('mealPreviewContent').innerHTML = `
+      ${meal.strMealThumb ? `<img src="${meal.strMealThumb}" style="width:100%;border-radius:10px;margin-bottom:12px;max-height:180px;object-fit:cover">` : ''}
+      ${meal.strCategory ? `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">${meal.strCategory} · ${meal.strArea || ''}</div>` : ''}
+
+      <div class="card" style="background:var(--bg);margin-bottom:10px">
+        <h3>Estimated Macros</h3>
+        <div class="macro-chips mt-8">
+          <span class="chip chip-cal">${estimated.cal} cal</span>
+          <span class="chip chip-p">${estimated.p}g protein</span>
+          <span class="chip chip-c">${estimated.c}g carbs</span>
+          <span class="chip chip-f">${estimated.f}g fat</span>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:6px">Estimated from matched ingredients — adjust after adding</div>
+      </div>
+
+      <div class="section-title">Ingredients</div>
+      ${ingredients.map(i => `<div style="padding:4px 0;font-size:0.85rem;border-bottom:1px solid var(--border)">${i.measure ? '<span style="color:var(--muted)">' + i.measure + '</span> ' : ''}${i.name}</div>`).join('')}
+
+      ${meal.strInstructions ? `
+        <div class="section-title" style="margin-top:12px">Instructions</div>
+        <div style="font-size:0.82rem;color:var(--muted);line-height:1.5;max-height:120px;overflow-y:auto">${meal.strInstructions.slice(0,600)}${meal.strInstructions.length > 600 ? '...' : ''}</div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        ${alreadySaved
+          ? `<div class="btn btn-secondary w-full" style="text-align:center;opacity:0.6">Already in Library</div>`
+          : `<button class="btn btn-primary w-full" onclick="addDiscoveredMeal(${JSON.stringify(meal.strMeal).replace(/"/g,'&quot;')},${estimated.cal},${estimated.p},${estimated.c},${estimated.f},${JSON.stringify(ingredients).replace(/"/g,'&quot;')})">+ Add to Meal Library</button>`}
+      </div>`;
+  } catch(e) {
+    document.getElementById('mealPreviewContent').innerHTML = '<div class="empty">Could not load recipe</div>';
+  }
+}
+
+function estimateMacrosFromIngredients(ingredients) {
+  let cal = 0, p = 0, c = 0, f = 0;
+  ingredients.forEach(ing => {
+    const match = FOOD_DB.find(f => ing.name.toLowerCase().includes(f.name.split(' ')[0].toLowerCase()) || f.name.toLowerCase().includes(ing.name.toLowerCase().split(' ')[0]));
+    if (match) {
+      const amount = parseFloat(ing.measure) || match.per;
+      const ratio = amount / match.per;
+      cal += match.cal * ratio;
+      p += match.p * ratio;
+      c += match.c * ratio;
+      f += match.f * ratio;
+    }
+  });
+  // If nothing matched, give a rough 500 cal estimate
+  if (cal === 0) { cal = 500; p = 25; c = 50; f = 15; }
+  return { cal: Math.round(cal), p: Math.round(p), c: Math.round(c), f: Math.round(f) };
+}
+
+function addDiscoveredMeal(name, cal, p, c, f, ingredients) {
+  const meal = {
+    id: uid(), name,
+    cal, protein: p, carbs: c, fat: f,
+    ingredients: ingredients.map(i => ({ name: i.name, amount: 100, unit: 'g', cal: 0, p: 0, c: 0, f: 0 }))
+  };
+  state.meals.push(meal);
+  save();
+  closeModal('mealPreviewModal');
+  closeModal('mealDiscoverModal');
+  renderMealLibrary();
+  alert(`"${name}" added to your Meal Library! Open it in Edit to adjust the macros.`);
+}
+
+async function suggestByMacros() {
+  const tot = getTotals(today());
+  const t = getTargets(today());
+  const remCal = Math.max(0, t.calories - tot.cal);
+  const remP = Math.max(0, t.protein - tot.protein);
+  const el = document.getElementById('discoverResults');
+  el.innerHTML = '<div class="empty">Finding meals for your macros...</div>';
+
+  // Search for high-protein meals if protein is low, balanced otherwise
+  const queries = remP > 40 ? ['chicken','beef','salmon','tuna','turkey'] : ['pasta','salad','rice','soup','stir fry'];
+  const query = queries[Math.floor(Math.random() * queries.length)];
+
+  try {
+    const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${query}`);
+    const data = await res.json();
+    const meals = (data.meals || []).slice(0, 8);
+    if (meals.length === 0) { el.innerHTML = '<div class="empty">No suggestions found — try browsing categories</div>'; return; }
+
+    el.innerHTML = `<div class="section-title">Suggested for you (${remCal} cal · ${remP}g protein left)</div>` +
+      meals.map(m => `
+        <div class="meal-row" style="cursor:pointer" onclick="previewMeal('${m.idMeal}','${(m.strMeal||'').replace(/'/g,"\\'")}')">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+            ${m.strMealThumb ? `<img src="${m.strMealThumb}/preview" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">` : ''}
+            <div class="meal-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.strMeal}</div>
+          </div>
+          <span style="color:var(--accent2)">›</span>
+        </div>`).join('');
+  } catch(e) { el.innerHTML = '<div class="empty">Offline — check connection</div>'; }
+}
+
+// ─── WORKOUT DISCOVERY ─────────────────────────────────────────────────────────
+
+const WORKOUT_PROGRAMS = {
+  'Push / Pull / Legs': {
+    desc: '6-day hypertrophy split — classic for muscle building',
+    days: {
+      Monday:    { name:'Push A', focus:'Chest / Shoulders / Triceps', exercises:[{name:'Barbell Bench Press',sets:4,reps:'6-8'},{name:'Overhead Press',sets:3,reps:'8-10'},{name:'Incline DB Press',sets:3,reps:'10-12'},{name:'Lateral Raise',sets:3,reps:'15-20'},{name:'Tricep Pushdown',sets:3,reps:'12-15'},{name:'Overhead Tricep Ext',sets:3,reps:'12-15'}]},
+      Tuesday:   { name:'Pull A', focus:'Back / Biceps', exercises:[{name:'Deadlift',sets:4,reps:'4-6'},{name:'Barbell Row',sets:4,reps:'6-8'},{name:'Lat Pulldown',sets:3,reps:'10-12'},{name:'Face Pull',sets:3,reps:'15-20'},{name:'Barbell Curl',sets:3,reps:'10-12'},{name:'Hammer Curl',sets:2,reps:'12'}]},
+      Wednesday: { name:'Legs A', focus:'Quad / Glute Focus', exercises:[{name:'Back Squat',sets:4,reps:'6-8'},{name:'Leg Press',sets:3,reps:'10-12'},{name:'Leg Extension',sets:3,reps:'15'},{name:'Romanian Deadlift',sets:3,reps:'10-12'},{name:'Hip Thrust',sets:3,reps:'12-15'},{name:'Calf Raise',sets:4,reps:'15-20'}]},
+      Thursday:  { name:'Push B', focus:'Shoulders / Chest / Triceps', exercises:[{name:'Overhead Press',sets:4,reps:'6-8'},{name:'DB Bench Press',sets:3,reps:'10-12'},{name:'Cable Lateral Raise',sets:4,reps:'15'},{name:'Pec Deck',sets:3,reps:'12-15'},{name:'Skull Crusher',sets:3,reps:'10-12'},{name:'Tricep Dips',sets:3,reps:'12'}]},
+      Friday:    { name:'Pull B', focus:'Back Thickness / Biceps', exercises:[{name:'Weighted Pull-Up',sets:4,reps:'6-8'},{name:'Cable Row',sets:4,reps:'10-12'},{name:'Single Arm DB Row',sets:3,reps:'10-12'},{name:'Reverse Fly',sets:3,reps:'15'},{name:'Incline DB Curl',sets:3,reps:'12'},{name:'Concentration Curl',sets:2,reps:'12'}]},
+      Saturday:  { name:'Legs B', focus:'Hamstring / Glute Focus', exercises:[{name:'Romanian Deadlift',sets:4,reps:'8-10'},{name:'Hack Squat',sets:3,reps:'10-12'},{name:'Lying Leg Curl',sets:4,reps:'10-12'},{name:'Walking Lunge',sets:3,reps:'12 each'},{name:'Hip Thrust',sets:4,reps:'15'},{name:'Seated Calf Raise',sets:4,reps:'15-20'}]},
+      Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+    }
+  },
+  'Upper / Lower': {
+    desc: '4-day split — great for strength + size balance',
+    days: {
+      Monday:    { name:'Upper A', focus:'Strength Focus', exercises:[{name:'Barbell Bench Press',sets:4,reps:'4-6'},{name:'Barbell Row',sets:4,reps:'4-6'},{name:'Overhead Press',sets:3,reps:'6-8'},{name:'Weighted Pull-Up',sets:3,reps:'6-8'},{name:'Tricep Pushdown',sets:2,reps:'12'},{name:'Barbell Curl',sets:2,reps:'12'}]},
+      Tuesday:   { name:'Lower A', focus:'Strength Focus', exercises:[{name:'Back Squat',sets:4,reps:'4-6'},{name:'Romanian Deadlift',sets:3,reps:'6-8'},{name:'Leg Press',sets:3,reps:'10'},{name:'Leg Curl',sets:3,reps:'10'},{name:'Calf Raise',sets:3,reps:'15'}]},
+      Wednesday: { name:'Rest', focus:'Active Recovery', exercises:[] },
+      Thursday:  { name:'Upper B', focus:'Hypertrophy Focus', exercises:[{name:'Incline DB Press',sets:4,reps:'8-12'},{name:'Cable Row',sets:4,reps:'8-12'},{name:'DB Shoulder Press',sets:3,reps:'10-12'},{name:'Lat Pulldown',sets:3,reps:'10-12'},{name:'Lateral Raise',sets:3,reps:'15'},{name:'Face Pull',sets:3,reps:'15'},{name:'Skull Crusher',sets:2,reps:'12'},{name:'Incline Curl',sets:2,reps:'12'}]},
+      Friday:    { name:'Lower B', focus:'Hypertrophy Focus', exercises:[{name:'Romanian Deadlift',sets:4,reps:'8-12'},{name:'Hack Squat',sets:4,reps:'8-12'},{name:'Leg Curl',sets:3,reps:'12-15'},{name:'Hip Thrust',sets:4,reps:'12-15'},{name:'Leg Extension',sets:3,reps:'15'},{name:'Calf Raise',sets:4,reps:'15-20'}]},
+      Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+    }
+  },
+  '5x5 Strength': {
+    desc: '3-day full body — proven strength builder (beginner/intermediate)',
+    days: {
+      Monday:    { name:'Workout A', focus:'Full Body Strength', exercises:[{name:'Back Squat',sets:5,reps:'5'},{name:'Barbell Bench Press',sets:5,reps:'5'},{name:'Barbell Row',sets:5,reps:'5'}]},
+      Tuesday:   { name:'Rest', focus:'Recovery', exercises:[] },
+      Wednesday: { name:'Workout B', focus:'Full Body Strength', exercises:[{name:'Back Squat',sets:5,reps:'5'},{name:'Overhead Press',sets:5,reps:'5'},{name:'Deadlift',sets:1,reps:'5'}]},
+      Thursday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Friday:    { name:'Workout A', focus:'Full Body Strength', exercises:[{name:'Back Squat',sets:5,reps:'5'},{name:'Barbell Bench Press',sets:5,reps:'5'},{name:'Barbell Row',sets:5,reps:'5'}]},
+      Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+    }
+  },
+  'Full Body 3x': {
+    desc: '3-day full body — great for beginners or busy schedules',
+    days: {
+      Monday:    { name:'Full Body', focus:'Compound + Accessory', exercises:[{name:'Back Squat',sets:3,reps:'8-10'},{name:'Barbell Bench Press',sets:3,reps:'8-10'},{name:'Barbell Row',sets:3,reps:'8-10'},{name:'Overhead Press',sets:2,reps:'10-12'},{name:'Lat Pulldown',sets:2,reps:'10-12'},{name:'Plank',sets:3,reps:'45s'}]},
+      Tuesday:   { name:'Rest', focus:'Recovery', exercises:[] },
+      Wednesday: { name:'Full Body', focus:'Compound + Accessory', exercises:[{name:'Deadlift',sets:3,reps:'6-8'},{name:'Incline DB Press',sets:3,reps:'10-12'},{name:'Cable Row',sets:3,reps:'10-12'},{name:'Lateral Raise',sets:3,reps:'15'},{name:'Leg Press',sets:3,reps:'10-12'},{name:'Leg Curl',sets:3,reps:'12'}]},
+      Thursday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Friday:    { name:'Full Body', focus:'Compound + Accessory', exercises:[{name:'Back Squat',sets:3,reps:'8-10'},{name:'Weighted Pull-Up',sets:3,reps:'8-10'},{name:'DB Bench Press',sets:3,reps:'10-12'},{name:'Hip Thrust',sets:3,reps:'12-15'},{name:'Face Pull',sets:3,reps:'15'},{name:'Ab Wheel Rollout',sets:3,reps:'10'}]},
+      Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+    }
+  },
+  'Bro Split': {
+    desc: '5-day bodybuilder split — one muscle group per day',
+    days: {
+      Monday:    { name:'Chest', focus:'Chest Day', exercises:[{name:'Barbell Bench Press',sets:4,reps:'8-12'},{name:'Incline DB Press',sets:4,reps:'10-12'},{name:'Decline Press',sets:3,reps:'10-12'},{name:'Cable Fly',sets:3,reps:'12-15'},{name:'Pec Deck',sets:3,reps:'15'}]},
+      Tuesday:   { name:'Back', focus:'Back Day', exercises:[{name:'Deadlift',sets:4,reps:'6-8'},{name:'Weighted Pull-Up',sets:4,reps:'8-10'},{name:'Barbell Row',sets:4,reps:'8-10'},{name:'Single Arm DB Row',sets:3,reps:'10-12'},{name:'Lat Pulldown',sets:3,reps:'12'}]},
+      Wednesday: { name:'Shoulders', focus:'Shoulder Day', exercises:[{name:'Overhead Press',sets:4,reps:'8-10'},{name:'Lateral Raise',sets:4,reps:'15'},{name:'Front Raise',sets:3,reps:'15'},{name:'Rear Delt Fly',sets:3,reps:'15'},{name:'Face Pull',sets:3,reps:'15'},{name:'Shrug',sets:3,reps:'12'}]},
+      Thursday:  { name:'Arms', focus:'Biceps / Triceps', exercises:[{name:'Barbell Curl',sets:4,reps:'10-12'},{name:'Incline DB Curl',sets:3,reps:'12'},{name:'Hammer Curl',sets:3,reps:'12'},{name:'Tricep Pushdown',sets:4,reps:'12-15'},{name:'Overhead Tricep Ext',sets:3,reps:'12'},{name:'Skull Crusher',sets:3,reps:'12'}]},
+      Friday:    { name:'Legs', focus:'Leg Day', exercises:[{name:'Back Squat',sets:4,reps:'8-12'},{name:'Leg Press',sets:4,reps:'10-12'},{name:'Leg Extension',sets:3,reps:'15'},{name:'Romanian Deadlift',sets:3,reps:'10-12'},{name:'Leg Curl',sets:3,reps:'12-15'},{name:'Calf Raise',sets:5,reps:'15-20'}]},
+      Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
+      Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+    }
+  }
+};
+
+function openWorkoutDiscover() {
+  renderWorkoutDiscoverHome();
+  openModal('workoutDiscoverModal');
+}
+
+function renderWorkoutDiscoverHome() {
+  document.getElementById('workoutDiscoverContent').innerHTML = `
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">Browse preset programs or use individual days to replace your current plan.</p>
+    ${Object.entries(WORKOUT_PROGRAMS).map(([name, prog]) => `
+      <div class="card" style="margin-bottom:10px">
+        <div class="flex justify-between align-center">
+          <div>
+            <div class="meal-name" style="font-size:1rem">${name}</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px">${prog.desc}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm w-full" onclick="previewWorkoutProgram('${name.replace(/'/g,"\\'")}')">Preview</button>
+          <button class="btn btn-primary btn-sm w-full" onclick="importFullProgram('${name.replace(/'/g,"\\'")}')">Import All</button>
+        </div>
+      </div>`).join('')}`;
+}
+
+function previewWorkoutProgram(name) {
+  const prog = WORKOUT_PROGRAMS[name];
+  if (!prog) return;
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  document.getElementById('workoutDiscoverContent').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="renderWorkoutDiscoverHome()" style="margin-bottom:12px">← Back</button>
+    <div class="meal-name" style="font-size:1rem;margin-bottom:4px">${name}</div>
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">${prog.desc}</div>
+    ${days.map(day => {
+      const d = prog.days[day];
+      if (!d) return '';
+      return `<div class="card" style="margin-bottom:8px">
+        <div class="flex justify-between align-center">
+          <div>
+            <div style="font-weight:600;font-size:0.9rem">${day} — ${d.name}</div>
+            <div style="font-size:0.75rem;color:var(--muted)">${d.focus}</div>
+          </div>
+          ${d.exercises.length > 0 ? `<button class="btn btn-sm btn-primary" onclick="importSingleDay('${name.replace(/'/g,"\\'")}','${day}')">Use</button>` : ''}
+        </div>
+        ${d.exercises.length > 0 ? `<div style="margin-top:8px">${d.exercises.map(ex => `<div style="font-size:0.8rem;color:var(--muted);padding:2px 0">${ex.name} — ${ex.sets}×${ex.reps}</div>`).join('')}</div>` : `<div style="font-size:0.8rem;color:var(--muted);margin-top:4px">Rest</div>`}
+      </div>`;
+    }).join('')}
+    <button class="btn btn-primary w-full mt-8" onclick="importFullProgram('${name.replace(/'/g,"\\'")}')">Import Full Program</button>`;
+}
+
+function importSingleDay(programName, day) {
+  const prog = WORKOUT_PROGRAMS[programName];
+  if (!prog || !prog.days[day]) return;
+  if (!confirm(`Replace your ${day} workout with "${prog.days[day].name}" from ${programName}?`)) return;
+  WORKOUT_PLAN[day] = JSON.parse(JSON.stringify(prog.days[day]));
+  save(); renderWorkout(); renderToday();
+  closeModal('workoutDiscoverModal');
+  alert(`${day} updated!`);
+}
+
+function importFullProgram(programName) {
+  const prog = WORKOUT_PROGRAMS[programName];
+  if (!prog) return;
+  if (!confirm(`Replace your entire workout plan with "${programName}"? This cannot be undone (unless you export first).`)) return;
+  Object.assign(WORKOUT_PLAN, JSON.parse(JSON.stringify(prog.days)));
+  save(); renderWorkout(); renderToday();
+  closeModal('workoutDiscoverModal');
+  alert(`"${programName}" imported successfully!`);
 }
 
 // ─── WORKOUT EDITOR ───────────────────────────────────────────────────────────
