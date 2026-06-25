@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -180,8 +180,15 @@
 
 <!-- MEALS TAB -->
 <div id="tab-meals" class="tab">
-  <div style="margin-bottom:12px;display:flex;justify-content:flex-end">
-    <button class="btn btn-primary" onclick="openMealBuilder()">+ Create Meal</button>
+  <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+    <input id="mealSearchInput" placeholder="Search meals..." oninput="renderMealLibrary(this.value)" style="flex:1;margin:0">
+    <button class="btn btn-primary btn-sm" onclick="openMealBuilder()">+ New</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="btn btn-secondary btn-sm w-full" onclick="exportMeals()">⬇ Export</button>
+    <label class="btn btn-secondary btn-sm w-full" style="text-align:center;cursor:pointer;margin:0">
+      ⬆ Import<input type="file" accept=".json" onchange="importMeals(this)" style="display:none">
+    </label>
   </div>
   <div id="mealLibraryList"></div>
 </div>
@@ -668,13 +675,19 @@ function logCustomMeal() {
 
 // ─── MEAL LIBRARY ────────────────────────────────────────────────────────────
 
-function renderMealLibrary() {
+function renderMealLibrary(query) {
   const el = document.getElementById('mealLibraryList');
+  const q = (query || '').toLowerCase().trim();
+  const filtered = q ? state.meals.filter(m => m.name.toLowerCase().includes(q)) : state.meals;
   if (state.meals.length === 0) {
     el.innerHTML = '<div class="empty">No meals yet — create your first one</div>';
     return;
   }
-  el.innerHTML = state.meals.map(m => `
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="empty">No meals match your search</div>';
+    return;
+  }
+  el.innerHTML = filtered.map(m => `
     <div class="card">
       <div class="flex justify-between align-center">
         <div class="meal-name" style="font-size:1rem">${m.name}</div>
@@ -699,6 +712,38 @@ function deleteMeal(id) {
   if (!confirm('Delete this meal?')) return;
   state.meals = state.meals.filter(m => m.id !== id);
   save(); renderMealLibrary();
+}
+
+function exportMeals() {
+  const data = JSON.stringify({ version: 1, meals: state.meals }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'fittracker-meals-' + today() + '.json';
+  a.click();
+}
+
+function importMeals(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const imported = data.meals || data; // support array or {meals:[]}
+      if (!Array.isArray(imported)) { alert('Invalid file format'); return; }
+      let added = 0;
+      imported.forEach(m => {
+        if (!m.name) return;
+        const exists = state.meals.find(x => x.name.toLowerCase() === m.name.toLowerCase());
+        if (!exists) { state.meals.push({ ...m, id: m.id || uid() }); added++; }
+      });
+      save(); renderMealLibrary();
+      alert(`Imported ${added} new meal${added !== 1 ? 's' : ''}. ${imported.length - added} already existed.`);
+    } catch(err) { alert('Could not read file: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = '';
 }
 
 // ─── MEAL BUILDER ────────────────────────────────────────────────────────────
@@ -759,18 +804,68 @@ function renderBuilderContent(nameVal) {
 }
 
 let selectedFood = null;
+let foodSearchTimer = null;
 
 function searchFoods(q) {
   const el = document.getElementById('foodResults');
   if (!q) { el.style.display='none'; return; }
-  const results = FOOD_DB.filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
-  if (results.length === 0) { el.style.display='none'; return; }
+
+  // Local results first (instant)
+  const local = FOOD_DB.filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
   el.style.display = 'block';
-  el.innerHTML = results.map(f => `
+  el.innerHTML = (local.length > 0 ? local.map(f => `
     <div class="food-result" onclick="selectFood(${JSON.stringify(f).replace(/"/g,'&quot;')})">
       <span>${f.name}</span>
-      <span style="color:var(--muted)">${f.cal} cal/${f.per}${f.unit}</span>
-    </div>`).join('');
+      <span style="color:var(--muted)">${f.cal} cal/100g</span>
+    </div>`).join('') : '') +
+    `<div class="food-result" id="offSearchRow" style="color:var(--muted);font-style:italic;justify-content:center">
+      🔍 Searching online...
+    </div>`;
+
+  // Debounced online search
+  clearTimeout(foodSearchTimer);
+  foodSearchTimer = setTimeout(() => searchFoodsOnline(q), 500);
+}
+
+async function searchFoodsOnline(q) {
+  const el = document.getElementById('foodResults');
+  const statusRow = document.getElementById('offSearchRow');
+  try {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=10&fields=product_name,nutriments,serving_size`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const products = (data.products || []).filter(p =>
+      p.product_name &&
+      p.nutriments &&
+      p.nutriments['energy-kcal_100g'] > 0
+    ).slice(0, 8);
+
+    if (statusRow) statusRow.remove();
+
+    if (products.length > 0) {
+      const onlineSection = `<div style="padding:6px 12px;font-size:0.7rem;color:var(--accent2);background:var(--bg);border-bottom:1px solid var(--border)">ONLINE RESULTS</div>` +
+        products.map(p => {
+          const n = p.nutriments;
+          const food = {
+            name: p.product_name.slice(0, 60),
+            unit: 'g', per: 100,
+            cal: Math.round(n['energy-kcal_100g'] || 0),
+            p:   Math.round((n['proteins_100g'] || 0) * 10) / 10,
+            c:   Math.round((n['carbohydrates_100g'] || 0) * 10) / 10,
+            f:   Math.round((n['fat_100g'] || 0) * 10) / 10
+          };
+          return `<div class="food-result" onclick="selectFood(${JSON.stringify(food).replace(/"/g,'&quot;')})">
+            <span style="max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${food.name}</span>
+            <span style="color:var(--muted)">${food.cal} cal/100g</span>
+          </div>`;
+        }).join('');
+      el.innerHTML = el.innerHTML + onlineSection;
+    } else {
+      if (statusRow) statusRow.textContent = 'No online results found';
+    }
+  } catch(e) {
+    if (statusRow) statusRow.textContent = 'Offline — showing local results only';
+  }
 }
 
 function selectFood(food) {
@@ -941,4 +1036,3 @@ renderToday();
 </script>
 </body>
 </html>
-
