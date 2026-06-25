@@ -117,9 +117,10 @@
 
 <div class="header">
   <h1>⚡ FitTracker</h1>
-  <div>
+  <div style="display:flex;align-items:center;gap:8px">
     <span id="headerDate" class="date"></span>
-    <span id="dayTypePill" class="pill pill-training" style="margin-left:8px">Training</span>
+    <span id="dayTypePill" class="pill pill-training">Training</span>
+    <button onclick="openSettings()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:2px 4px">⚙️</button>
   </div>
 </div>
 
@@ -261,6 +262,15 @@
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('settingsModal')">✕</button>
+    <h2>Goals & Profile</h2>
+    <div id="settingsContent"></div>
+  </div>
+</div>
+
 <!-- MEAL DISCOVER MODAL -->
 <div class="modal-overlay" id="mealDiscoverModal">
   <div class="modal">
@@ -302,10 +312,172 @@
 
 const TRAINING_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
 
-const TARGETS = {
-  training: { calories: 3100, protein: 160, carbs: 350, fat: 90 },
-  rest:     { calories: 2600, protein: 160, carbs: 250, fat: 85 }
+const GOALS = {
+  cut:       { label: 'Cut',           desc: 'Lose fat, preserve muscle',   color: '#ef4444', calsurplus: -500, proteinMult: 1.0 },
+  maintain:  { label: 'Maintain',      desc: 'Stay at current weight',      color: '#f59e0b', calsurplus:    0, proteinMult: 0.85 },
+  lean_bulk: { label: 'Lean Bulk',     desc: 'Gain muscle, minimize fat',   color: '#22c55e', calsurplus: +300, proteinMult: 1.0 },
+  bulk:      { label: 'Aggressive Bulk', desc: 'Maximize size and strength', color: '#a855f7', calsurplus: +600, proteinMult: 1.0 },
+  custom:    { label: 'Custom',         desc: 'Set your own targets',        color: '#64748b', calsurplus:    0, proteinMult: 1.0 }
 };
+
+let profile = JSON.parse(localStorage.getItem('ft_profile') || 'null') || {
+  goal: 'lean_bulk',
+  weightLbs: 163,
+  heightIn: 73,   // 6'1"
+  age: 22,
+  sex: 'male',
+  activity: 1.55, // moderate (4-5x/week)
+  customTraining: { calories: 3100, protein: 160, carbs: 350, fat: 90 },
+  customRest:     { calories: 2600, protein: 160, carbs: 250, fat: 85 }
+};
+
+function calcTDEE() {
+  const kg = profile.weightLbs * 0.453592;
+  const cm = profile.heightIn * 2.54;
+  const bmr = profile.sex === 'male'
+    ? 10 * kg + 6.25 * cm - 5 * profile.age + 5
+    : 10 * kg + 6.25 * cm - 5 * profile.age - 161;
+  return Math.round(bmr * profile.activity);
+}
+
+function getTargets(d) {
+  if (profile.goal === 'custom') {
+    return isTrainingDay(d) ? profile.customTraining : profile.customRest;
+  }
+  const g = GOALS[profile.goal];
+  const tdee = calcTDEE();
+  const baseCal = tdee + g.calsurplus;
+  const protein = Math.round(profile.weightLbs * g.proteinMult);
+  const trainingCal = baseCal + 200;
+  const restCal = baseCal - 100;
+  const fat = Math.round((baseCal * 0.27) / 9);
+  const trainingCarbs = Math.round((trainingCal - protein * 4 - fat * 9) / 4);
+  const restCarbs = Math.round((restCal - protein * 4 - fat * 9) / 4);
+  if (isTrainingDay(d)) {
+    return { calories: trainingCal, protein, carbs: Math.max(trainingCarbs, 50), fat };
+  } else {
+    return { calories: restCal, protein, carbs: Math.max(restCarbs, 50), fat };
+  }
+}
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+function openSettings() {
+  renderSettings();
+  openModal('settingsModal');
+}
+
+function renderSettings() {
+  const tdee = calcTDEE();
+  const tTargets = getTargets('Monday');   // training
+  const rTargets = getTargets('Saturday'); // rest
+
+  document.getElementById('settingsContent').innerHTML = `
+    <div class="section-title">Your Goal</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      ${Object.entries(GOALS).map(([key, g]) => `
+        <div onclick="setGoal('${key}')" style="padding:12px;border-radius:10px;border:2px solid ${profile.goal===key ? g.color : 'var(--border)'};cursor:pointer;background:${profile.goal===key ? g.color+'18' : 'var(--card)'};transition:all 0.2s">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:600;font-size:0.9rem;color:${profile.goal===key ? g.color : 'var(--text)'}">${g.label}</div>
+              <div style="font-size:0.75rem;color:var(--muted)">${g.desc}</div>
+            </div>
+            ${profile.goal===key ? `<div style="color:${g.color};font-size:1.1rem">✓</div>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <div class="section-title">Your Stats</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><label>Weight (lbs)</label><input type="number" id="sWeight" value="${profile.weightLbs}" oninput="updateProfileField('weightLbs',+this.value);refreshSettingsCalc()"></div>
+      <div><label>Age</label><input type="number" id="sAge" value="${profile.age}" oninput="updateProfileField('age',+this.value);refreshSettingsCalc()"></div>
+      <div><label>Height (inches)</label><input type="number" id="sHeight" value="${profile.heightIn}" oninput="updateProfileField('heightIn',+this.value);refreshSettingsCalc()"></div>
+      <div><label>Sex</label>
+        <select id="sSex" onchange="updateProfileField('sex',this.value);refreshSettingsCalc()">
+          <option value="male" ${profile.sex==='male'?'selected':''}>Male</option>
+          <option value="female" ${profile.sex==='female'?'selected':''}>Female</option>
+        </select>
+      </div>
+    </div>
+    <label>Activity Level</label>
+    <select id="sActivity" onchange="updateProfileField('activity',+this.value);refreshSettingsCalc()">
+      <option value="1.2"  ${profile.activity==1.2?'selected':''}>Sedentary (desk job, little exercise)</option>
+      <option value="1.375" ${profile.activity==1.375?'selected':''}>Light (1-3x/week)</option>
+      <option value="1.55" ${profile.activity==1.55?'selected':''}>Moderate (4-5x/week)</option>
+      <option value="1.725" ${profile.activity==1.725?'selected':''}>Very Active (6-7x/week)</option>
+      <option value="1.9"  ${profile.activity==1.9?'selected':''}>Athlete (2x/day)</option>
+    </select>
+
+    <div class="card mt-16" style="background:var(--bg)" id="settingsCalcCard">
+      <h3>Calculated Targets</h3>
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">TDEE: ~${tdee} cal/day</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-size:0.72rem;color:var(--accent2);text-transform:uppercase;margin-bottom:4px">Training Days</div>
+          <div class="macro-chips"><span class="chip chip-cal">${tTargets.calories} cal</span><span class="chip chip-p">${tTargets.protein}g P</span><span class="chip chip-c">${tTargets.carbs}g C</span><span class="chip chip-f">${tTargets.fat}g F</span></div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Rest Days</div>
+          <div class="macro-chips"><span class="chip chip-cal">${rTargets.calories} cal</span><span class="chip chip-p">${rTargets.protein}g P</span><span class="chip chip-c">${rTargets.carbs}g C</span><span class="chip chip-f">${rTargets.fat}g F</span></div>
+        </div>
+      </div>
+    </div>
+
+    ${profile.goal === 'custom' ? `
+    <div class="section-title" style="margin-top:16px">Custom Targets</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Training Days</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+      <div><label>Calories</label><input type="number" value="${profile.customTraining.calories}" oninput="profile.customTraining.calories=+this.value;saveProfile()"></div>
+      <div><label>Protein (g)</label><input type="number" value="${profile.customTraining.protein}" oninput="profile.customTraining.protein=+this.value;saveProfile()"></div>
+      <div><label>Carbs (g)</label><input type="number" value="${profile.customTraining.carbs}" oninput="profile.customTraining.carbs=+this.value;saveProfile()"></div>
+      <div><label>Fat (g)</label><input type="number" value="${profile.customTraining.fat}" oninput="profile.customTraining.fat=+this.value;saveProfile()"></div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Rest Days</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div><label>Calories</label><input type="number" value="${profile.customRest.calories}" oninput="profile.customRest.calories=+this.value;saveProfile()"></div>
+      <div><label>Protein (g)</label><input type="number" value="${profile.customRest.protein}" oninput="profile.customRest.protein=+this.value;saveProfile()"></div>
+      <div><label>Carbs (g)</label><input type="number" value="${profile.customRest.carbs}" oninput="profile.customRest.carbs=+this.value;saveProfile()"></div>
+      <div><label>Fat (g)</label><input type="number" value="${profile.customRest.fat}" oninput="profile.customRest.fat=+this.value;saveProfile()"></div>
+    </div>` : ''}
+
+    <button class="btn btn-primary w-full mt-16" onclick="closeModal('settingsModal');renderToday();renderNutrition()">Save & Apply</button>`;
+}
+
+function setGoal(key) {
+  profile.goal = key;
+  saveProfile();
+  renderSettings();
+}
+
+function updateProfileField(field, val) {
+  profile[field] = val;
+  saveProfile();
+}
+
+function refreshSettingsCalc() {
+  // Recalculate and update just the calc card
+  const tdee = calcTDEE();
+  const tT = getTargets('Monday');
+  const rT = getTargets('Saturday');
+  const card = document.getElementById('settingsCalcCard');
+  if (card) card.innerHTML = `
+    <h3>Calculated Targets</h3>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">TDEE: ~${tdee} cal/day</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <div style="font-size:0.72rem;color:var(--accent2);text-transform:uppercase;margin-bottom:4px">Training Days</div>
+        <div class="macro-chips"><span class="chip chip-cal">${tT.calories} cal</span><span class="chip chip-p">${tT.protein}g P</span><span class="chip chip-c">${tT.carbs}g C</span><span class="chip chip-f">${tT.fat}g F</span></div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Rest Days</div>
+        <div class="macro-chips"><span class="chip chip-cal">${rT.calories} cal</span><span class="chip chip-p">${rT.protein}g P</span><span class="chip chip-c">${rT.carbs}g C</span><span class="chip chip-f">${rT.fat}g F</span></div>
+      </div>
+    </div>`;
+}
+
+function saveProfile() {
+  localStorage.setItem('ft_profile', JSON.stringify(profile));
+}
 
 const DEFAULT_WORKOUT_PLAN = {
   Monday:    { name:'Push', focus:'Chest / Shoulders / Triceps', exercises:[
@@ -419,9 +591,6 @@ function dayName(d) {
 }
 function isTrainingDay(d) {
   return TRAINING_DAYS.includes(dayName(d));
-}
-function getTargets(d) {
-  return isTrainingDay(d) ? TARGETS.training : TARGETS.rest;
 }
 function getDayLog(d) {
   if (!state.dailyLogs[d]) state.dailyLogs[d] = { meals: [] };
