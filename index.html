@@ -148,7 +148,14 @@
 <!-- WORKOUT TAB -->
 <div id="tab-workout" class="tab">
   <div class="card">
-    <h3>Select Day</h3>
+    <div class="flex justify-between align-center mb-8">
+      <h3 style="margin:0">Select Day</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-secondary" onclick="exportWorkout()">⬇</button>
+        <label class="btn btn-sm btn-secondary" style="cursor:pointer;margin:0">⬆<input type="file" accept=".json" onchange="importWorkout(this)" style="display:none"></label>
+        <button class="btn btn-sm btn-primary" onclick="openWorkoutEditor(state.selectedWorkoutDay || 'Monday')">Edit</button>
+      </div>
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-sm" id="wdMon" onclick="selectWorkoutDay('Monday')">Mon</button>
       <button class="btn btn-sm" id="wdTue" onclick="selectWorkoutDay('Tuesday')">Tue</button>
@@ -254,6 +261,15 @@
   </div>
 </div>
 
+<!-- WORKOUT EDITOR MODAL -->
+<div class="modal-overlay" id="workoutEditorModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('workoutEditorModal')">✕</button>
+    <h2 id="workoutEditorTitle">Edit Workout</h2>
+    <div id="workoutEditorContent"></div>
+  </div>
+</div>
+
 <script>
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -264,7 +280,7 @@ const TARGETS = {
   rest:     { calories: 2600, protein: 160, carbs: 250, fat: 85 }
 };
 
-const WORKOUT_PLAN = {
+const DEFAULT_WORKOUT_PLAN = {
   Monday:    { name:'Push', focus:'Chest / Shoulders / Triceps', exercises:[
     {name:'Barbell Bench Press', sets:4, reps:'6-8'},
     {name:'Incline Dumbbell Press', sets:3, reps:'10-12'},
@@ -311,6 +327,8 @@ const WORKOUT_PLAN = {
   Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
   Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
 };
+
+let WORKOUT_PLAN = JSON.parse(localStorage.getItem('ft_workout') || 'null') || JSON.parse(JSON.stringify(DEFAULT_WORKOUT_PLAN));
 
 const FOOD_DB = [
   {name:'Chicken Breast',    unit:'g',   cal:165, p:31,  c:0,  f:3.6, per:100},
@@ -360,6 +378,7 @@ function save() {
   localStorage.setItem('ft_daily', JSON.stringify(state.dailyLogs));
   localStorage.setItem('ft_wlogs', JSON.stringify(state.workoutLogs));
   localStorage.setItem('ft_shop', JSON.stringify(state.shoppingChecked));
+  localStorage.setItem('ft_workout', JSON.stringify(WORKOUT_PLAN));
 }
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
@@ -1016,6 +1035,179 @@ function clearShoppingChecks() {
   state.shoppingChecked = {};
   save(); renderShopping();
   document.getElementById('shoppingListOutput').innerHTML = '';
+}
+
+// ─── WORKOUT EDITOR ───────────────────────────────────────────────────────────
+
+let editingDay = null;
+let editorExercises = [];
+let exSearchTimer = null;
+
+function openWorkoutEditor(day) {
+  editingDay = day;
+  editorExercises = JSON.parse(JSON.stringify(WORKOUT_PLAN[day].exercises || []));
+  document.getElementById('workoutEditorTitle').textContent = 'Edit ' + day;
+  renderWorkoutEditor();
+  openModal('workoutEditorModal');
+}
+
+function renderWorkoutEditor() {
+  const plan = WORKOUT_PLAN[editingDay];
+  const exRows = editorExercises.map((ex, i) => `
+    <div class="exercise-row" id="exrow_${i}">
+      <div style="flex:1;min-width:0">
+        <input value="${ex.name}" oninput="editorExercises[${i}].name=this.value" style="margin-bottom:6px;font-size:0.85rem">
+        <div style="display:flex;gap:6px">
+          <input type="number" value="${ex.sets}" min="1" max="10" oninput="editorExercises[${i}].sets=+this.value" style="width:60px;font-size:0.82rem" placeholder="Sets">
+          <input value="${ex.reps}" oninput="editorExercises[${i}].reps=this.value" style="flex:1;font-size:0.82rem" placeholder="Reps e.g. 8-12">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-left:8px">
+        <button class="btn-icon" onclick="moveExercise(${i},-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="btn-icon" onclick="moveExercise(${i},1)" ${i===editorExercises.length-1?'disabled':''}>↓</button>
+        <button class="delete-btn" onclick="removeEditorExercise(${i})">✕</button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('workoutEditorContent').innerHTML = `
+    <label>Workout Name</label>
+    <input id="editorDayName" value="${plan.name}" placeholder="e.g. Push">
+    <label>Focus / Description</label>
+    <input id="editorDayFocus" value="${plan.focus}" placeholder="e.g. Chest / Shoulders">
+
+    <div class="section-title" style="margin-top:16px">Exercises</div>
+    <div id="editorExList">${exRows || '<div class="text-muted" style="padding:8px 0">No exercises — add one below</div>'}</div>
+
+    <div class="section-title" style="margin-top:16px">Add Exercise</div>
+    <input id="exSearch" placeholder="Search exercises (e.g. bench press, squat...)" oninput="searchExercises(this.value)">
+    <div id="exSearchResults" class="food-search-results" style="display:none"></div>
+
+    <div id="newExRow" style="display:none;margin-top:8px">
+      <input id="newExName" placeholder="Exercise name" style="margin-bottom:6px">
+      <div style="display:flex;gap:8px">
+        <input id="newExSets" type="number" placeholder="Sets" min="1" max="10" style="width:80px">
+        <input id="newExReps" placeholder="Reps (e.g. 8-12)" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="addEditorExercise()" style="white-space:nowrap">Add</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:20px">
+      <button class="btn btn-secondary w-full" onclick="resetDayToDefault('${editingDay}')">Reset to Default</button>
+      <button class="btn btn-primary w-full" onclick="saveWorkoutEdits()">Save Day</button>
+    </div>`;
+}
+
+function moveExercise(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= editorExercises.length) return;
+  [editorExercises[i], editorExercises[j]] = [editorExercises[j], editorExercises[i]];
+  renderWorkoutEditor();
+}
+
+function removeEditorExercise(i) {
+  editorExercises.splice(i, 1);
+  renderWorkoutEditor();
+}
+
+function addEditorExercise() {
+  const name = document.getElementById('newExName').value.trim();
+  const sets = parseInt(document.getElementById('newExSets').value) || 3;
+  const reps = document.getElementById('newExReps').value.trim() || '10-12';
+  if (!name) { alert('Enter an exercise name'); return; }
+  editorExercises.push({ name, sets, reps });
+  document.getElementById('newExName').value = '';
+  document.getElementById('newExSets').value = '';
+  document.getElementById('newExReps').value = '';
+  document.getElementById('newExRow').style.display = 'none';
+  document.getElementById('exSearch').value = '';
+  renderWorkoutEditor();
+}
+
+function saveWorkoutEdits() {
+  const name = document.getElementById('editorDayName').value.trim() || WORKOUT_PLAN[editingDay].name;
+  const focus = document.getElementById('editorDayFocus').value.trim() || WORKOUT_PLAN[editingDay].focus;
+  WORKOUT_PLAN[editingDay] = { name, focus, exercises: editorExercises };
+  save();
+  closeModal('workoutEditorModal');
+  renderWorkout();
+  renderToday();
+}
+
+function resetDayToDefault(day) {
+  if (!confirm('Reset ' + day + ' to the default workout?')) return;
+  WORKOUT_PLAN[day] = JSON.parse(JSON.stringify(DEFAULT_WORKOUT_PLAN[day]));
+  editorExercises = JSON.parse(JSON.stringify(WORKOUT_PLAN[day].exercises || []));
+  save();
+  renderWorkoutEditor();
+}
+
+async function searchExercises(q) {
+  const el = document.getElementById('exSearchResults');
+  const newExRow = document.getElementById('newExRow');
+  if (!q) { el.style.display = 'none'; newExRow.style.display = 'none'; return; }
+
+  // Show manual entry option immediately
+  newExRow.style.display = 'block';
+  document.getElementById('newExName').value = q;
+
+  clearTimeout(exSearchTimer);
+  exSearchTimer = setTimeout(async () => {
+    el.style.display = 'block';
+    el.innerHTML = '<div class="food-result" style="color:var(--muted);font-style:italic;justify-content:center">🔍 Searching...</div>';
+    try {
+      const res = await fetch(`https://wger.de/api/v2/exercise/search/?term=${encodeURIComponent(q)}&language=english&format=json`);
+      const data = await res.json();
+      const suggestions = (data.suggestions || []).slice(0, 10);
+      if (suggestions.length === 0) {
+        el.innerHTML = '<div class="food-result" style="color:var(--muted);justify-content:center">No results — enter manually below</div>';
+        return;
+      }
+      el.innerHTML = suggestions.map(s => `
+        <div class="food-result" onclick="pickExercise(${JSON.stringify(s.value).replace(/"/g,'&quot;')})">
+          <span>${s.value}</span>
+          <span style="color:var(--muted);font-size:0.75rem">${s.data?.category?.name || ''}</span>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = '<div class="food-result" style="color:var(--muted);justify-content:center">Offline — enter manually below</div>';
+    }
+  }, 400);
+}
+
+function pickExercise(name) {
+  document.getElementById('exSearch').value = name;
+  document.getElementById('exSearchResults').style.display = 'none';
+  document.getElementById('newExName').value = name;
+  document.getElementById('newExRow').style.display = 'block';
+  document.getElementById('newExSets').focus();
+}
+
+function exportWorkout() {
+  const data = JSON.stringify({ version: 1, workout: WORKOUT_PLAN }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'fittracker-workout-' + today() + '.json';
+  a.click();
+}
+
+function importWorkout(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const plan = data.workout || data;
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const valid = days.every(d => plan[d] && Array.isArray(plan[d].exercises));
+      if (!valid) { alert('Invalid workout file'); return; }
+      Object.assign(WORKOUT_PLAN, plan);
+      save(); renderWorkout(); renderToday();
+      alert('Workout plan imported successfully!');
+    } catch(err) { alert('Could not read file: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = '';
 }
 
 // ─── MODAL HELPERS ────────────────────────────────────────────────────────────
