@@ -181,7 +181,10 @@
   <div class="card">
     <div class="flex justify-between align-center mb-8">
       <h3 style="margin:0">Logged Meals</h3>
-      <button class="btn btn-sm btn-primary" onclick="openAddMealModal()">+ Add Meal</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-secondary" onclick="openEstimator()">🔍 Estimate</button>
+        <button class="btn btn-sm btn-primary" onclick="openAddMealModal()">+ Add</button>
+      </div>
     </div>
     <div id="nutritionMealList"></div>
   </div>
@@ -259,6 +262,15 @@
     <button class="modal-close" onclick="closeModal('logWorkoutModal')">✕</button>
     <h2 id="logWorkoutTitle">Log Exercise</h2>
     <div id="logWorkoutContent"></div>
+  </div>
+</div>
+
+<!-- ESTIMATOR MODAL -->
+<div class="modal-overlay" id="estimatorModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('estimatorModal')">✕</button>
+    <h2>🔍 Food Estimator</h2>
+    <div id="estimatorContent"></div>
   </div>
 </div>
 
@@ -558,6 +570,56 @@ const FOOD_DB = [
   {name:'Blueberries',       unit:'g',   cal:57,  p:0.7, c:14, f:0.3, per:100},
   {name:'Orange Juice',      unit:'ml',  cal:45,  p:0.7, c:10, f:0.2, per:100},
   {name:'Shrimp',            unit:'g',   cal:99,  p:24,  c:0.2,f:0.3, per:100},
+  // ── Restaurant / common prepared items ──
+  {name:'Flour Tortilla (burrito)',unit:'each',cal:290,p:7,  c:47, f:7,   per:1},
+  {name:'Flour Tortilla (small)', unit:'each',cal:100,p:3,  c:17, f:2.5, per:1},
+  {name:'White Rice (restaurant)',unit:'g',   cal:140,p:3,  c:30, f:0.5, per:100},
+  {name:'Black Beans',            unit:'g',   cal:132,p:8.9,c:24, f:0.5, per:100},
+  {name:'Pinto Beans',            unit:'g',   cal:143,p:9,  c:26, f:0.5, per:100},
+  {name:'Refried Beans',          unit:'g',   cal:100,p:5,  c:16, f:1.5, per:100},
+  {name:'Sour Cream',             unit:'g',   cal:193,p:2.4,c:4.6,f:19,  per:100},
+  {name:'Guacamole',              unit:'g',   cal:150,p:2,  c:8,  f:13,  per:100},
+  {name:'Salsa',                  unit:'g',   cal:36, p:1.7,c:7,  f:0.2, per:100},
+  {name:'Shredded Cheese',        unit:'g',   cal:403,p:25, c:1.3,f:33,  per:100},
+  {name:'Lettuce',                unit:'g',   cal:15, p:1.4,c:2.9,f:0.2, per:100},
+  {name:'Corn',                   unit:'g',   cal:86, p:3.3,c:19, f:1.4, per:100},
+  {name:'Fajita Veggies',         unit:'g',   cal:35, p:1,  c:6,  f:1,   per:100},
+  {name:'Chips (tortilla)',        unit:'g',   cal:489,p:6,  c:63, f:24,  per:100},
+  {name:'Burger Bun',             unit:'each',cal:145,p:5,  c:26, f:2.5, per:1},
+  {name:'Ground Beef Patty',      unit:'g',   cal:250,p:26, c:0,  f:17,  per:100},
+  {name:'American Cheese Slice',  unit:'each',cal:60, p:3.5,c:1,  f:4.5, per:1},
+  {name:'Bacon',                  unit:'strip',cal:43,p:3,  c:0.1,f:3.3, per:1},
+  {name:'French Fries',           unit:'g',   cal:312,p:3.4,c:41, f:15,  per:100},
+  {name:'Pizza Slice (cheese)',   unit:'slice',cal:285,p:12,c:36, f:10,  per:1},
+  {name:'Pepperoni',              unit:'g',   cal:494,p:21, c:2,  f:44,  per:100},
+  {name:'Steak (grilled)',        unit:'g',   cal:217,p:26, c:0,  f:12,  per:100},
+  {name:'Carnitas',               unit:'g',   cal:250,p:28, c:0,  f:15,  per:100},
+  {name:'Sofritas',               unit:'g',   cal:145,p:8,  c:12, f:7,   per:100},
+  {name:'Chicken (grilled strip)',unit:'g',   cal:148,p:28, c:0,  f:3.5, per:100},
+  {name:'Teriyaki Chicken',       unit:'g',   cal:161,p:23, c:9,  f:3.5, per:100},
+  {name:'Fried Rice',             unit:'g',   cal:163,p:4,  c:28, f:4,   per:100},
+  {name:'Lo Mein Noodles',        unit:'g',   cal:156,p:5,  c:26, f:3.5, per:100},
+  {name:'Spring Roll',            unit:'each',cal:80, p:2,  c:12, f:2.5, per:1},
+  {name:'Sushi Rice',             unit:'g',   cal:150,p:3,  c:33, f:0.3, per:100},
+  {name:'Salmon Sashimi',         unit:'piece',cal:40,p:6,  c:0,  f:1.5, per:1},
+  {name:'Edamame',                unit:'g',   cal:121,p:11, c:8.9,f:5.2, per:100},
+  {name:'Hummus',                 unit:'g',   cal:177,p:7.9,c:14, f:10,  per:100},
+  {name:'Pita Bread',             unit:'each',cal:165,p:5.5,c:33, f:1.5, per:1},
+  {name:'Caesar Dressing',        unit:'tbsp',cal:78, p:0.7,c:0.5,f:8.5, per:1},
+  {name:'Ranch Dressing',         unit:'tbsp',cal:73, p:0.2,c:1,  f:7.7, per:1},
+  {name:'Protein Bar',            unit:'each',cal:200,p:20, c:22, f:7,   per:1},
+  {name:'Bagel',                  unit:'each',cal:270,p:10, c:52, f:1.5, per:1},
+  {name:'Cream Cheese',           unit:'tbsp',cal:51, p:1,  c:0.8,f:5,   per:1},
+  {name:'Pancake',                unit:'each',cal:90, p:2.5,c:14, f:2.8, per:1},
+  {name:'Maple Syrup',            unit:'tbsp',cal:52, p:0,  c:13, f:0,   per:1},
+  {name:'Orange',                 unit:'each',cal:62, p:1.2,c:15, f:0.2, per:1},
+  {name:'Strawberries',           unit:'g',   cal:33, p:0.7,c:8,  f:0.3, per:100},
+  {name:'Mixed Nuts',             unit:'g',   cal:607,p:15, c:21, f:54,  per:100},
+  {name:'Dark Chocolate',         unit:'g',   cal:546,p:5,  c:60, f:31,  per:100},
+  {name:'Honey',                  unit:'tbsp',cal:64, p:0.1,c:17, f:0,   per:1},
+  {name:'Ketchup',                unit:'tbsp',cal:19, p:0.3,c:4.5,f:0.1, per:1},
+  {name:'Mayo',                   unit:'tbsp',cal:94, p:0.1,c:0.1,f:10,  per:1},
+  {name:'Mustard',                unit:'tbsp',cal:9,  p:0.7,c:0.9,f:0.5, per:1},
 ];
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -1231,6 +1293,216 @@ function clearShoppingChecks() {
   state.shoppingChecked = {};
   save(); renderShopping();
   document.getElementById('shoppingListOutput').innerHTML = '';
+}
+
+// ─── FOOD ESTIMATOR ───────────────────────────────────────────────────────────
+
+// Context-aware default portions (grams or count) keyed by food name fragment
+const PORTION_HINTS = {
+  'tortilla':70, 'burrito':1, 'taco':1, 'wrap':1, 'bun':1, 'bagel':1,
+  'rice':180, 'fried rice':200, 'lo mein':200, 'pasta':200, 'noodle':200,
+  'beans':120, 'black bean':120, 'pinto bean':120, 'refried':80,
+  'chicken':150, 'steak':150, 'beef':150, 'carnitas':120, 'sofritas':120,
+  'salmon':150, 'tuna':120, 'shrimp':120, 'fish':140,
+  'cheese':40, 'shredded cheese':40, 'slice':1,
+  'sour cream':30, 'guac':60, 'guacamole':60,
+  'salsa':50, 'lettuce':30, 'veggies':80, 'corn':60,
+  'fries':150, 'chips':50, 'tortilla chip':50,
+  'egg':2, 'bacon':3, 'strip':3,
+  'sauce':30, 'dressing':30, 'mayo':15, 'ketchup':20, 'ranch':30,
+  'oats':80, 'oatmeal':80, 'pancake':3,
+  'bread':2, 'toast':2,
+  'milk':240, 'yogurt':170, 'cottage':170,
+  'protein bar':1, 'bar':1,
+  'banana':1, 'apple':1, 'orange':1,
+  'avocado':80, 'sweet potato':150, 'potato':150,
+  'peanut butter':32, 'almond':30, 'nut':30, 'mixed nut':30,
+  'olive oil':14, 'oil':14,
+  'protein powder':1, 'scoop':1,
+  'pizza':2,
+};
+
+let estimatorItems = [];
+
+function openEstimator() {
+  estimatorItems = [];
+  document.getElementById('estimatorContent').innerHTML = `
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px">
+      Describe any meal in plain English. Include the dish and ingredients — the more detail the better.
+    </p>
+    <textarea id="estimatorInput" rows="3" placeholder="e.g. Chipotle burrito with chicken, white rice, black beans, shredded cheese, sour cream and guacamole" style="resize:vertical;font-family:inherit"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="estimatorMealName" placeholder="Meal name (optional)" style="flex:1">
+      <button class="btn btn-primary" onclick="runEstimator()">Estimate</button>
+    </div>
+
+    <div class="section-title" style="margin-top:16px">Examples</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${[
+        'Chipotle burrito with chicken, rice, black beans, cheese and sour cream',
+        'McDonald\'s Big Mac with fries',
+        'Chicken teriyaki bowl with fried rice and edamame',
+        'Greek yogurt with oats, banana and honey',
+        'Egg scramble with 3 eggs, bacon and cheese on a bagel'
+      ].map(ex => `<div onclick="document.getElementById('estimatorInput').value='${ex.replace(/'/g,"\\'")}'" style="padding:8px 10px;background:var(--card);border-radius:8px;font-size:0.8rem;color:var(--muted);cursor:pointer;border:1px solid var(--border)">${ex}</div>`).join('')}
+    </div>
+
+    <div id="estimatorResults"></div>`;
+  openModal('estimatorModal');
+}
+
+function runEstimator() {
+  const raw = document.getElementById('estimatorInput').value.trim();
+  if (!raw) return;
+
+  // Parse: strip filler words, split on commas/and/with
+  const stripped = raw.toLowerCase()
+    .replace(/\b(a|an|the|some|little|bit of|side of|on top|topped with|topped|drizzled|drizzle|extra|large|small|medium|half|double|no|without)\b/g, ' ')
+    .replace(/[()]/g, '');
+  const tokens = stripped.split(/,|and|with|\+|&/).map(t => t.trim()).filter(Boolean);
+
+  // Also try the whole phrase for restaurant combos
+  const allPhrases = [stripped, ...tokens];
+
+  estimatorItems = [];
+  const matched = new Set();
+
+  allPhrases.forEach(phrase => {
+    // Find best matching food in DB
+    let best = null, bestScore = 0;
+    FOOD_DB.forEach(food => {
+      const fname = food.name.toLowerCase();
+      const fwords = fname.split(' ');
+      const pwords = phrase.split(' ');
+      // Score: how many food name words appear in phrase
+      let score = fwords.filter(w => w.length > 2 && pwords.some(pw => pw.includes(w) || w.includes(pw))).length;
+      // Bonus for exact substring match
+      if (phrase.includes(fname)) score += 3;
+      if (fname.includes(phrase.replace(/\s+/g,' ').trim())) score += 2;
+      if (score > bestScore) { bestScore = score; best = food; }
+    });
+
+    if (best && bestScore > 0 && !matched.has(best.name)) {
+      matched.add(best.name);
+      // Determine default portion
+      const fname = best.name.toLowerCase();
+      let amount = best.per; // default to the "per" unit
+      for (const [hint, portion] of Object.entries(PORTION_HINTS)) {
+        if (fname.includes(hint) || phrase.includes(hint)) {
+          amount = portion;
+          break;
+        }
+      }
+      const ratio = amount / best.per;
+      estimatorItems.push({
+        food: best, amount,
+        cal: Math.round(best.cal * ratio),
+        p: Math.round(best.p * ratio * 10) / 10,
+        c: Math.round(best.c * ratio * 10) / 10,
+        f: Math.round(best.f * ratio * 10) / 10
+      });
+    }
+  });
+
+  renderEstimatorResults();
+}
+
+function renderEstimatorResults() {
+  const el = document.getElementById('estimatorResults');
+  if (estimatorItems.length === 0) {
+    el.innerHTML = '<div class="empty" style="margin-top:16px">No foods matched — try being more specific about ingredients</div>';
+    return;
+  }
+
+  const totals = estimatorItems.reduce((a, i) => ({
+    cal: a.cal + i.cal, p: a.p + i.p, c: a.c + i.c, f: a.f + i.f
+  }), { cal: 0, p: 0, c: 0, f: 0 });
+
+  el.innerHTML = `
+    <div class="section-title" style="margin-top:16px">Matched Components</div>
+    <div id="estimatorItemList">
+      ${estimatorItems.map((item, i) => `
+        <div class="ingredient-row" id="estrow_${i}">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.85rem;font-weight:500">${item.food.name}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+              <input type="number" value="${item.amount}" min="0" step="any"
+                oninput="updateEstimatorItem(${i}, +this.value)"
+                style="width:70px;font-size:0.8rem;padding:4px 8px">
+              <span style="font-size:0.75rem;color:var(--muted)">${item.food.unit}</span>
+            </div>
+          </div>
+          <div style="text-align:right;font-size:0.75rem" id="estmacro_${i}">
+            <div style="color:#c084fc">${item.cal} cal</div>
+            <div style="color:#60a5fa">${item.p}g P</div>
+            <div style="color:#fbbf24">${item.c}g C · <span style="color:#f472b6">${item.f}g F</span></div>
+          </div>
+          <button class="delete-btn" onclick="removeEstimatorItem(${i})">✕</button>
+        </div>`).join('')}
+    </div>
+
+    <div class="card mt-16" style="background:var(--bg)" id="estimatorTotals">
+      <h3>Estimated Total</h3>
+      <div class="macro-chips mt-8">
+        <span class="chip chip-cal">${Math.round(totals.cal)} cal</span>
+        <span class="chip chip-p">${Math.round(totals.p)}g protein</span>
+        <span class="chip chip-c">${Math.round(totals.c)}g carbs</span>
+        <span class="chip chip-f">${Math.round(totals.f)}g fat</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-secondary w-full" onclick="logEstimate()">+ Log to Today</button>
+      <button class="btn btn-primary w-full" onclick="saveEstimateToLibrary()">Save to Library</button>
+    </div>`;
+}
+
+function updateEstimatorItem(i, amount) {
+  const item = estimatorItems[i];
+  if (!item || amount < 0) return;
+  item.amount = amount;
+  const ratio = amount / item.food.per;
+  item.cal = Math.round(item.food.cal * ratio);
+  item.p   = Math.round(item.food.p * ratio * 10) / 10;
+  item.c   = Math.round(item.food.c * ratio * 10) / 10;
+  item.f   = Math.round(item.food.f * ratio * 10) / 10;
+  // Update macro display
+  const macroEl = document.getElementById('estmacro_' + i);
+  if (macroEl) macroEl.innerHTML = `<div style="color:#c084fc">${item.cal} cal</div><div style="color:#60a5fa">${item.p}g P</div><div style="color:#fbbf24">${item.c}g C · <span style="color:#f472b6">${item.f}g F</span></div>`;
+  // Update totals
+  const totals = estimatorItems.reduce((a, x) => ({cal:a.cal+x.cal,p:a.p+x.p,c:a.c+x.c,f:a.f+x.f}),{cal:0,p:0,c:0,f:0});
+  const te = document.getElementById('estimatorTotals');
+  if (te) te.innerHTML = `<h3>Estimated Total</h3><div class="macro-chips mt-8"><span class="chip chip-cal">${Math.round(totals.cal)} cal</span><span class="chip chip-p">${Math.round(totals.p)}g protein</span><span class="chip chip-c">${Math.round(totals.c)}g carbs</span><span class="chip chip-f">${Math.round(totals.f)}g fat</span></div>`;
+}
+
+function removeEstimatorItem(i) {
+  estimatorItems.splice(i, 1);
+  renderEstimatorResults();
+}
+
+function getEstimateTotals() {
+  return estimatorItems.reduce((a, x) => ({cal:a.cal+x.cal,p:a.p+x.p,c:a.c+x.c,f:a.f+x.f}),{cal:0,p:0,c:0,f:0});
+}
+
+function logEstimate() {
+  const name = document.getElementById('estimatorMealName')?.value.trim() ||
+               document.getElementById('estimatorInput')?.value.trim().slice(0,40) || 'Estimated Meal';
+  const t = getEstimateTotals();
+  getDayLog(today()).meals.push({ name, cal: Math.round(t.cal), protein: Math.round(t.p), carbs: Math.round(t.c), fat: Math.round(t.f) });
+  save(); closeModal('estimatorModal'); renderToday(); renderNutrition();
+}
+
+function saveEstimateToLibrary() {
+  const name = document.getElementById('estimatorMealName')?.value.trim() ||
+               document.getElementById('estimatorInput')?.value.trim().slice(0,40) || 'Estimated Meal';
+  const t = getEstimateTotals();
+  state.meals.push({
+    id: uid(), name,
+    cal: Math.round(t.cal), protein: Math.round(t.p), carbs: Math.round(t.c), fat: Math.round(t.f),
+    ingredients: estimatorItems.map(i => ({ name: i.food.name, amount: i.amount, unit: i.food.unit, cal: i.cal, p: i.p, c: i.c, f: i.f }))
+  });
+  save(); closeModal('estimatorModal'); renderMealLibrary();
+  alert(`"${name}" saved to your Meal Library!`);
 }
 
 // ─── MEAL DISCOVERY ───────────────────────────────────────────────────────────
