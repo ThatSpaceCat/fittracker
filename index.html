@@ -1,0 +1,944 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitTracker</title>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a26;
+    --card: #22223a;
+    --border: #2e2e4a;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --protein: #3b82f6;
+    --carbs: #f59e0b;
+    --fat: #ec4899;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding-bottom: 80px; }
+  h1, h2, h3 { font-weight: 600; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .header h1 { font-size: 1.2rem; color: var(--accent2); }
+  .header .date { font-size: 0.8rem; color: var(--muted); }
+  .nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 10; }
+  .nav button { flex: 1; padding: 12px 4px 8px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.65rem; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: color 0.2s; }
+  .nav button.active { color: var(--accent2); }
+  .nav button svg { width: 22px; height: 22px; }
+  .tab { display: none; padding: 16px 16px; }
+  .tab.active { display: block; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { font-size: 0.9rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: opacity 0.2s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+  .btn-icon { background: var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9rem; }
+  .macro-bar-wrap { margin-bottom: 10px; }
+  .macro-bar-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.82rem; }
+  .macro-bar-label span:first-child { color: var(--text); }
+  .macro-bar-label span:last-child { color: var(--muted); }
+  .macro-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .macro-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .pill-training { background: #1e3a5f; color: #60a5fa; }
+  .pill-rest { background: #1a2e1a; color: var(--green); }
+  .exercise-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .exercise-row:last-child { border-bottom: none; }
+  .exercise-name { font-size: 0.9rem; font-weight: 500; }
+  .exercise-target { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+  .exercise-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+  .exercise-check.done { background: var(--accent); border-color: var(--accent); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.3s; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal h2 { font-size: 1.1rem; margin-bottom: 16px; }
+  .modal-close { float: right; background: var(--border); border: none; color: var(--text); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; width: 100%; outline: none; }
+  input:focus, select:focus { border-color: var(--accent); }
+  label { font-size: 0.82rem; color: var(--muted); display: block; margin-bottom: 4px; margin-top: 12px; }
+  .set-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .set-num { width: 28px; height: 28px; background: var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; }
+  .set-row input { flex: 1; }
+  .meal-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .meal-row:last-child { border-bottom: none; }
+  .meal-name { font-size: 0.9rem; font-weight: 500; }
+  .meal-macros { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .macro-chips { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .chip { font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; }
+  .chip-cal { background: #2e1f4a; color: #c084fc; }
+  .chip-p { background: #1e2e4a; color: #60a5fa; }
+  .chip-c { background: #2e2010; color: #fbbf24; }
+  .chip-f { background: #2e1020; color: #f472b6; }
+  .food-search-results { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 4px; }
+  .food-result { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.85rem; display: flex; justify-content: space-between; }
+  .food-result:hover { background: var(--border); }
+  .food-result:last-child { border-bottom: none; }
+  .ingredient-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .ingredient-row span { flex: 1; font-size: 0.85rem; }
+  .badge { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  .shopping-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .shopping-item:last-child { border-bottom: none; }
+  .shopping-item input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .shopping-item label { font-size: 0.9rem; cursor: pointer; margin: 0; color: var(--text); }
+  .shopping-item.checked label { text-decoration: line-through; color: var(--muted); }
+  .section-title { font-size: 0.78rem; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.08em; margin: 16px 0 8px; font-weight: 600; }
+  .empty { text-align: center; padding: 32px; color: var(--muted); font-size: 0.9rem; }
+  .today-ring-row { display: flex; justify-content: space-around; margin-bottom: 8px; }
+  .ring-item { text-align: center; }
+  .ring-val { font-size: 1.2rem; font-weight: 700; }
+  .ring-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .ring-sub { font-size: 0.7rem; color: var(--muted); }
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-8 { margin-bottom: 8px; }
+  .justify-between { justify-content: space-between; }
+  .align-center { align-items: center; }
+  .w-full { width: 100%; }
+  .text-muted { color: var(--muted); font-size: 0.85rem; }
+  .delete-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 4px; }
+  .delete-btn:hover { color: var(--red); }
+  .progress-row { display: flex; justify-content: space-around; text-align: center; margin: 12px 0; }
+  .progress-num { font-size: 1.4rem; font-weight: 700; }
+  .progress-label { font-size: 0.7rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚡ FitTracker</h1>
+  <div>
+    <span id="headerDate" class="date"></span>
+    <span id="dayTypePill" class="pill pill-training" style="margin-left:8px">Training</span>
+  </div>
+</div>
+
+<!-- TODAY TAB -->
+<div id="tab-today" class="tab active">
+  <div class="card">
+    <h3>Today's Macros</h3>
+    <div id="todayMacros"></div>
+  </div>
+  <div class="card">
+    <div class="flex justify-between align-center mb-8">
+      <h3 style="margin:0">Today's Workout</h3>
+      <span id="todayWorkoutName" class="text-muted"></span>
+    </div>
+    <div id="todayWorkoutList"></div>
+  </div>
+  <div class="card">
+    <div class="flex justify-between align-center mb-8">
+      <h3 style="margin:0">Meals Logged</h3>
+      <button class="btn btn-sm btn-primary" onclick="openAddMealModal()">+ Add</button>
+    </div>
+    <div id="todayMealList"></div>
+  </div>
+</div>
+
+<!-- WORKOUT TAB -->
+<div id="tab-workout" class="tab">
+  <div class="card">
+    <h3>Select Day</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm" id="wdMon" onclick="selectWorkoutDay('Monday')">Mon</button>
+      <button class="btn btn-sm" id="wdTue" onclick="selectWorkoutDay('Tuesday')">Tue</button>
+      <button class="btn btn-sm" id="wdWed" onclick="selectWorkoutDay('Wednesday')">Wed</button>
+      <button class="btn btn-sm" id="wdThu" onclick="selectWorkoutDay('Thursday')">Thu</button>
+      <button class="btn btn-sm" id="wdFri" onclick="selectWorkoutDay('Friday')">Fri</button>
+      <button class="btn btn-sm" id="wdSat" onclick="selectWorkoutDay('Saturday')">Sat</button>
+      <button class="btn btn-sm" id="wdSun" onclick="selectWorkoutDay('Sunday')">Sun</button>
+    </div>
+  </div>
+  <div id="workoutContent"></div>
+</div>
+
+<!-- NUTRITION TAB -->
+<div id="tab-nutrition" class="tab">
+  <div class="card">
+    <h3>Daily Targets</h3>
+    <div id="nutritionMacros"></div>
+    <div id="nutritionTotals" class="progress-row"></div>
+  </div>
+  <div class="card">
+    <div class="flex justify-between align-center mb-8">
+      <h3 style="margin:0">Logged Meals</h3>
+      <button class="btn btn-sm btn-primary" onclick="openAddMealModal()">+ Add Meal</button>
+    </div>
+    <div id="nutritionMealList"></div>
+  </div>
+</div>
+
+<!-- MEALS TAB -->
+<div id="tab-meals" class="tab">
+  <div style="margin-bottom:12px;display:flex;justify-content:flex-end">
+    <button class="btn btn-primary" onclick="openMealBuilder()">+ Create Meal</button>
+  </div>
+  <div id="mealLibraryList"></div>
+</div>
+
+<!-- SHOPPING TAB -->
+<div id="tab-shopping" class="tab">
+  <div class="card">
+    <h3>Select Meals to Include</h3>
+    <div id="shoppingMealSelect"></div>
+    <button class="btn btn-primary w-full mt-8" onclick="generateShoppingList()">Generate List</button>
+  </div>
+  <div id="shoppingListOutput"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="nav">
+  <button class="active" onclick="switchTab('today',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    Today
+  </button>
+  <button onclick="switchTab('workout',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M3 8h4M17 8h4M3 16h4M17 16h4"/></svg>
+    Workout
+  </button>
+  <button onclick="switchTab('nutrition',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+    Nutrition
+  </button>
+  <button onclick="switchTab('meals',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+    Meals
+  </button>
+  <button onclick="switchTab('shopping',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    Shop
+  </button>
+</nav>
+
+<!-- ADD MEAL MODAL -->
+<div class="modal-overlay" id="addMealModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('addMealModal')">✕</button>
+    <h2>Log a Meal</h2>
+    <div id="addMealContent"></div>
+  </div>
+</div>
+
+<!-- MEAL BUILDER MODAL -->
+<div class="modal-overlay" id="mealBuilderModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('mealBuilderModal')">✕</button>
+    <h2 id="mealBuilderTitle">Create Meal</h2>
+    <div id="mealBuilderContent"></div>
+  </div>
+</div>
+
+<!-- LOG WORKOUT MODAL -->
+<div class="modal-overlay" id="logWorkoutModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('logWorkoutModal')">✕</button>
+    <h2 id="logWorkoutTitle">Log Exercise</h2>
+    <div id="logWorkoutContent"></div>
+  </div>
+</div>
+
+<script>
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
+
+const TRAINING_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+
+const TARGETS = {
+  training: { calories: 3100, protein: 160, carbs: 350, fat: 90 },
+  rest:     { calories: 2600, protein: 160, carbs: 250, fat: 85 }
+};
+
+const WORKOUT_PLAN = {
+  Monday:    { name:'Push', focus:'Chest / Shoulders / Triceps', exercises:[
+    {name:'Barbell Bench Press', sets:4, reps:'6-8'},
+    {name:'Incline Dumbbell Press', sets:3, reps:'10-12'},
+    {name:'Cable Lateral Raise', sets:3, reps:'12-15 each'},
+    {name:'Seated DB Shoulder Press', sets:3, reps:'10-12'},
+    {name:'Tricep Rope Pushdown', sets:3, reps:'12-15'},
+    {name:'Overhead Tricep Extension', sets:3, reps:'12-15'}
+  ]},
+  Tuesday:   { name:'Pull', focus:'Back / Biceps', exercises:[
+    {name:'Deadlift', sets:4, reps:'5'},
+    {name:'Barbell Row', sets:4, reps:'8-10'},
+    {name:'Lat Pulldown', sets:3, reps:'10-12'},
+    {name:'Face Pulls', sets:3, reps:'15'},
+    {name:'Incline Dumbbell Curl', sets:3, reps:'12'},
+    {name:'Hammer Curl', sets:3, reps:'12'}
+  ]},
+  Wednesday: { name:'Legs', focus:'Quads / Hamstrings / Glutes / Calves', exercises:[
+    {name:'Back Squat', sets:4, reps:'6-8'},
+    {name:'Leg Press (feet high)', sets:4, reps:'10-12'},
+    {name:'Romanian Deadlift', sets:4, reps:'10-12'},
+    {name:'Lying Leg Curl', sets:3, reps:'12-15'},
+    {name:'Hip Thrust', sets:4, reps:'12-15'},
+    {name:'Calf Raise', sets:4, reps:'15-20'}
+  ]},
+  Thursday:  { name:'Upper', focus:'Chest + Back Volume', exercises:[
+    {name:'Dumbbell Bench Press', sets:4, reps:'10-12'},
+    {name:'Cable Row (wide grip)', sets:4, reps:'10-12'},
+    {name:'Pull-Up', sets:3, reps:'8-10'},
+    {name:'Dumbbell Lateral Raise', sets:3, reps:'15'},
+    {name:'Pec Deck / Cable Fly', sets:3, reps:'12-15'},
+    {name:'Barbell Curl', sets:3, reps:'10-12'},
+    {name:'Skull Crusher', sets:3, reps:'12'}
+  ]},
+  Friday:    { name:'Lower + Core', focus:'Glutes / Hamstrings / Hips / Core', exercises:[
+    {name:'Goblet Squat', sets:3, reps:'12-15'},
+    {name:'Nordic Hamstring Curl', sets:3, reps:'6-8'},
+    {name:'Walking Lunge', sets:3, reps:'12 each'},
+    {name:'Cable Pull-Through', sets:3, reps:'15'},
+    {name:'Lateral Band Walk', sets:3, reps:'15 each'},
+    {name:'Plank', sets:3, reps:'45-60s'},
+    {name:'Dead Bug', sets:3, reps:'10 each'},
+    {name:'Ab Wheel Rollout', sets:3, reps:'10'}
+  ]},
+  Saturday:  { name:'Rest', focus:'Recovery', exercises:[] },
+  Sunday:    { name:'Rest', focus:'Recovery', exercises:[] }
+};
+
+const FOOD_DB = [
+  {name:'Chicken Breast',    unit:'g',   cal:165, p:31,  c:0,  f:3.6, per:100},
+  {name:'Ground Turkey 93%', unit:'g',   cal:150, p:21,  c:0,  f:7,   per:100},
+  {name:'Salmon',            unit:'g',   cal:208, p:20,  c:0,  f:13,  per:100},
+  {name:'Egg',               unit:'egg', cal:70,  p:6,   c:0.5,f:5,   per:1},
+  {name:'Greek Yogurt 0%',   unit:'g',   cal:59,  p:10,  c:3.6,f:0.4, per:100},
+  {name:'Cottage Cheese',    unit:'g',   cal:98,  p:11,  c:3.4,f:4.3, per:100},
+  {name:'Protein Powder',    unit:'scoop(30g)', cal:120,p:25,c:3,f:1.5,per:1},
+  {name:'White Rice (cooked)',unit:'g',  cal:130, p:2.7, c:28, f:0.3, per:100},
+  {name:'Brown Rice (cooked)',unit:'g',  cal:112, p:2.6, c:24, f:0.9, per:100},
+  {name:'Oats (dry)',        unit:'g',   cal:389, p:17,  c:66, f:7,   per:100},
+  {name:'Sweet Potato',      unit:'g',   cal:86,  p:1.6, c:20, f:0.1, per:100},
+  {name:'Pasta (cooked)',    unit:'g',   cal:158, p:5.8, c:31, f:0.9, per:100},
+  {name:'Whole Wheat Bread', unit:'slice',cal:70, p:3.5, c:13, f:1,   per:1},
+  {name:'Banana',            unit:'g',   cal:89,  p:1.1, c:23, f:0.3, per:100},
+  {name:'Apple',             unit:'g',   cal:52,  p:0.3, c:14, f:0.2, per:100},
+  {name:'Broccoli',          unit:'g',   cal:34,  p:2.8, c:7,  f:0.4, per:100},
+  {name:'Spinach',           unit:'g',   cal:23,  p:2.9, c:3.6,f:0.4, per:100},
+  {name:'Avocado',           unit:'g',   cal:160, p:2,   c:9,  f:15,  per:100},
+  {name:'Almonds',           unit:'g',   cal:579, p:21,  c:22, f:50,  per:100},
+  {name:'Olive Oil',         unit:'tbsp',cal:124, p:0,   c:0,  f:14,  per:1},
+  {name:'Whole Milk',        unit:'ml',  cal:61,  p:3.2, c:4.8,f:3.3, per:100},
+  {name:'Cheddar Cheese',    unit:'g',   cal:403, p:25,  c:1.3,f:33,  per:100},
+  {name:'Beef (90% lean)',   unit:'g',   cal:176, p:20,  c:0,  f:10,  per:100},
+  {name:'Tuna (canned)',     unit:'g',   cal:109, p:25,  c:0,  f:1,   per:100},
+  {name:'Peanut Butter',     unit:'tbsp',cal:94,  p:4,   c:3,  f:8,   per:1},
+  {name:'Blueberries',       unit:'g',   cal:57,  p:0.7, c:14, f:0.3, per:100},
+  {name:'Orange Juice',      unit:'ml',  cal:45,  p:0.7, c:10, f:0.2, per:100},
+  {name:'Shrimp',            unit:'g',   cal:99,  p:24,  c:0.2,f:0.3, per:100},
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+
+let state = {
+  meals: JSON.parse(localStorage.getItem('ft_meals') || '[]'),
+  dailyLogs: JSON.parse(localStorage.getItem('ft_daily') || '{}'),
+  workoutLogs: JSON.parse(localStorage.getItem('ft_wlogs') || '{}'),
+  selectedWorkoutDay: null,
+  editingMealId: null,
+  builderIngredients: [],
+  shoppingChecked: JSON.parse(localStorage.getItem('ft_shop') || '{}')
+};
+
+function save() {
+  localStorage.setItem('ft_meals', JSON.stringify(state.meals));
+  localStorage.setItem('ft_daily', JSON.stringify(state.dailyLogs));
+  localStorage.setItem('ft_wlogs', JSON.stringify(state.workoutLogs));
+  localStorage.setItem('ft_shop', JSON.stringify(state.shoppingChecked));
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+function dayName(d) {
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return days[new Date(d + 'T12:00:00').getDay()];
+}
+function isTrainingDay(d) {
+  return TRAINING_DAYS.includes(dayName(d));
+}
+function getTargets(d) {
+  return isTrainingDay(d) ? TARGETS.training : TARGETS.rest;
+}
+function getDayLog(d) {
+  if (!state.dailyLogs[d]) state.dailyLogs[d] = { meals: [] };
+  return state.dailyLogs[d];
+}
+function getTotals(d) {
+  const log = getDayLog(d);
+  let cal=0,p=0,c=0,f=0;
+  log.meals.forEach(m => { cal+=m.cal||0; p+=m.protein||0; c+=m.carbs||0; f+=m.fat||0; });
+  return { cal:Math.round(cal), protein:Math.round(p), carbs:Math.round(c), fat:Math.round(f) };
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function pct(val, max) { return Math.min(100, Math.round((val/max)*100)); }
+
+function macroBar(label, val, max, color) {
+  const p = pct(val, max);
+  return `<div class="macro-bar-wrap">
+    <div class="macro-bar-label"><span>${label}</span><span>${val} / ${max}</span></div>
+    <div class="macro-bar"><div class="macro-bar-fill" style="width:${p}%;background:${color}"></div></div>
+  </div>`;
+}
+
+// ─── TABS ────────────────────────────────────────────────────────────────────
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'today') renderToday();
+  if (name === 'workout') renderWorkout();
+  if (name === 'nutrition') renderNutrition();
+  if (name === 'meals') renderMealLibrary();
+  if (name === 'shopping') renderShopping();
+}
+
+// ─── TODAY ───────────────────────────────────────────────────────────────────
+
+function renderToday() {
+  const d = today();
+  const dn = dayName(d);
+  const t = getTargets(d);
+  const tot = getTotals(d);
+  const training = isTrainingDay(d);
+  const log = getDayLog(d);
+  const plan = WORKOUT_PLAN[dn];
+
+  document.getElementById('headerDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const pill = document.getElementById('dayTypePill');
+  pill.textContent = training ? 'Training' : 'Rest';
+  pill.className = 'pill ' + (training ? 'pill-training' : 'pill-rest');
+
+  document.getElementById('todayMacros').innerHTML =
+    macroBar('Calories', tot.cal, t.calories, '#a855f7') +
+    macroBar('Protein', tot.protein, t.protein, '#3b82f6') +
+    macroBar('Carbs', tot.carbs, t.carbs, '#f59e0b') +
+    macroBar('Fat', tot.fat, t.fat, '#ec4899');
+
+  // Workout
+  const wname = document.getElementById('todayWorkoutName');
+  const wlist = document.getElementById('todayWorkoutList');
+  if (plan && plan.exercises.length > 0) {
+    wname.textContent = plan.name + ' — ' + plan.focus;
+    const wlog = state.workoutLogs[d] || {};
+    wlist.innerHTML = plan.exercises.slice(0,4).map(ex => {
+      const done = wlog[ex.name];
+      return `<div class="exercise-row">
+        <div>
+          <div class="exercise-name">${ex.name}</div>
+          <div class="exercise-target">${ex.sets} × ${ex.reps}</div>
+        </div>
+        <div class="exercise-check ${done?'done':''}" onclick="toggleExercise('${d}','${ex.name}',this)">
+          ${done ? '✓' : ''}
+        </div>
+      </div>`;
+    }).join('') + (plan.exercises.length > 4 ? `<div class="text-muted" style="padding:8px 0">+${plan.exercises.length-4} more exercises</div>` : '');
+  } else {
+    wname.textContent = 'Rest Day';
+    wlist.innerHTML = '<div class="empty">Recovery day — no workout scheduled</div>';
+  }
+
+  // Meals
+  const mlist = document.getElementById('todayMealList');
+  if (log.meals.length === 0) {
+    mlist.innerHTML = '<div class="empty">No meals logged yet</div>';
+  } else {
+    mlist.innerHTML = log.meals.map((m,i) => `
+      <div class="meal-row">
+        <div>
+          <div class="meal-name">${m.name}</div>
+          <div class="macro-chips">
+            <span class="chip chip-cal">${m.cal} cal</span>
+            <span class="chip chip-p">${m.protein}g P</span>
+            <span class="chip chip-c">${m.carbs}g C</span>
+            <span class="chip chip-f">${m.fat}g F</span>
+          </div>
+        </div>
+        <button class="delete-btn" onclick="removeMealLog('${d}',${i})">✕</button>
+      </div>`).join('');
+  }
+}
+
+function toggleExercise(d, name, el) {
+  if (!state.workoutLogs[d]) state.workoutLogs[d] = {};
+  state.workoutLogs[d][name] = !state.workoutLogs[d][name];
+  el.classList.toggle('done');
+  el.textContent = state.workoutLogs[d][name] ? '✓' : '';
+  save();
+}
+
+function removeMealLog(d, i) {
+  state.dailyLogs[d].meals.splice(i,1);
+  save(); renderToday(); renderNutrition();
+}
+
+// ─── WORKOUT ─────────────────────────────────────────────────────────────────
+
+function renderWorkout() {
+  const dn = state.selectedWorkoutDay || dayName(today());
+  selectWorkoutDay(dn);
+}
+
+function selectWorkoutDay(dn) {
+  state.selectedWorkoutDay = dn;
+  document.querySelectorAll('.nav ~ div #wdMon, #wdTue, #wdWed, #wdThu, #wdFri, #wdSat, #wdSun').forEach(b => {});
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((d,i) => {
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const btn = document.getElementById('wd'+d);
+    if (btn) btn.className = 'btn btn-sm ' + (days[i]===dn ? 'btn-primary' : 'btn-secondary');
+  });
+
+  const plan = WORKOUT_PLAN[dn];
+  const el = document.getElementById('workoutContent');
+  if (!plan || plan.exercises.length === 0) {
+    el.innerHTML = `<div class="card"><div class="empty">Rest Day — Recovery & Sleep</div></div>`;
+    return;
+  }
+
+  const d = today();
+  const wlog = state.workoutLogs[d] || {};
+
+  el.innerHTML = `<div class="card">
+    <h3>${plan.name}</h3>
+    <div class="text-muted mb-8">${plan.focus}</div>
+    ${plan.exercises.map(ex => `
+      <div class="exercise-row">
+        <div>
+          <div class="exercise-name">${ex.name}</div>
+          <div class="exercise-target">${ex.sets} sets × ${ex.reps} reps</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-secondary" onclick="openLogWorkout('${ex.name}',${ex.sets},'${dn}')">Log</button>
+          <div class="exercise-check ${wlog[ex.name]?'done':''}" onclick="toggleExercise('${d}','${ex.name}',this)">${wlog[ex.name]?'✓':''}</div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function openLogWorkout(exName, numSets, dn) {
+  const d = today();
+  if (!state.workoutLogs[d]) state.workoutLogs[d] = {};
+  const prev = state.workoutLogs[d][exName+'_sets'] || [];
+
+  document.getElementById('logWorkoutTitle').textContent = exName;
+  let rows = '';
+  for (let i=0; i<numSets; i++) {
+    const s = prev[i] || {w:'',r:''};
+    rows += `<div class="set-row">
+      <div class="set-num">${i+1}</div>
+      <input type="number" placeholder="lbs" id="set_w_${i}" value="${s.w}" style="width:80px">
+      <input type="number" placeholder="reps" id="set_r_${i}" value="${s.r}" style="width:70px">
+    </div>`;
+  }
+  document.getElementById('logWorkoutContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <span class="text-muted">Weight</span><span class="text-muted">Reps</span>
+    </div>
+    ${rows}
+    <button class="btn btn-primary w-full mt-16" onclick="saveWorkoutSets('${exName}',${numSets},'${d}')">Save Sets</button>`;
+  openModal('logWorkoutModal');
+}
+
+function saveWorkoutSets(exName, numSets, d) {
+  if (!state.workoutLogs[d]) state.workoutLogs[d] = {};
+  const sets = [];
+  for (let i=0; i<numSets; i++) {
+    sets.push({
+      w: document.getElementById('set_w_'+i)?.value || '',
+      r: document.getElementById('set_r_'+i)?.value || ''
+    });
+  }
+  state.workoutLogs[d][exName+'_sets'] = sets;
+  state.workoutLogs[d][exName] = true;
+  save();
+  closeModal('logWorkoutModal');
+  renderWorkout();
+  renderToday();
+}
+
+// ─── NUTRITION ───────────────────────────────────────────────────────────────
+
+function renderNutrition() {
+  const d = today();
+  const t = getTargets(d);
+  const tot = getTotals(d);
+  const log = getDayLog(d);
+
+  document.getElementById('nutritionMacros').innerHTML =
+    macroBar('Calories', tot.cal, t.calories, '#a855f7') +
+    macroBar('Protein', tot.protein, t.protein, '#3b82f6') +
+    macroBar('Carbs', tot.carbs, t.carbs, '#f59e0b') +
+    macroBar('Fat', tot.fat, t.fat, '#ec4899');
+
+  document.getElementById('nutritionTotals').innerHTML = `
+    <div><div class="progress-num" style="color:#a855f7">${t.calories - tot.cal}</div><div class="progress-label">Cal Remaining</div></div>
+    <div><div class="progress-num" style="color:#3b82f6">${t.protein - tot.protein}g</div><div class="progress-label">Protein Left</div></div>
+    <div><div class="progress-num" style="color:#f59e0b">${t.carbs - tot.carbs}g</div><div class="progress-label">Carbs Left</div></div>
+    <div><div class="progress-num" style="color:#ec4899">${t.fat - tot.fat}g</div><div class="progress-label">Fat Left</div></div>`;
+
+  const mlist = document.getElementById('nutritionMealList');
+  if (log.meals.length === 0) {
+    mlist.innerHTML = '<div class="empty">No meals logged — add one above</div>';
+  } else {
+    mlist.innerHTML = log.meals.map((m,i) => `
+      <div class="meal-row">
+        <div>
+          <div class="meal-name">${m.name}</div>
+          <div class="macro-chips">
+            <span class="chip chip-cal">${m.cal} cal</span>
+            <span class="chip chip-p">${m.protein}g P</span>
+            <span class="chip chip-c">${m.carbs}g C</span>
+            <span class="chip chip-f">${m.fat}g F</span>
+          </div>
+        </div>
+        <button class="delete-btn" onclick="removeMealLog('${d}',${i}); renderNutrition()">✕</button>
+      </div>`).join('');
+  }
+}
+
+// ─── ADD MEAL MODAL ───────────────────────────────────────────────────────────
+
+function openAddMealModal() {
+  const libs = state.meals;
+  let html = '';
+
+  if (libs.length > 0) {
+    html += '<div class="section-title">From Your Meal Library</div>';
+    html += libs.map(m => `
+      <div class="meal-row" style="cursor:pointer" onclick="logMealFromLib('${m.id}')">
+        <div>
+          <div class="meal-name">${m.name}</div>
+          <div class="macro-chips">
+            <span class="chip chip-cal">${m.cal} cal</span>
+            <span class="chip chip-p">${m.protein}g P</span>
+            <span class="chip chip-c">${m.carbs}g C</span>
+            <span class="chip chip-f">${m.fat}g F</span>
+          </div>
+        </div>
+        <span style="color:var(--accent2);font-size:1.2rem">+</span>
+      </div>`).join('');
+  }
+
+  html += '<div class="section-title" style="margin-top:16px">Quick Add Custom</div>';
+  html += `
+    <label>Meal Name</label><input id="qName" placeholder="e.g. Lunch">
+    <label>Calories</label><input id="qCal" type="number" placeholder="0">
+    <label>Protein (g)</label><input id="qP" type="number" placeholder="0">
+    <label>Carbs (g)</label><input id="qC" type="number" placeholder="0">
+    <label>Fat (g)</label><input id="qF" type="number" placeholder="0">
+    <button class="btn btn-primary w-full mt-16" onclick="logCustomMeal()">Add to Today</button>`;
+
+  document.getElementById('addMealContent').innerHTML = html;
+  openModal('addMealModal');
+}
+
+function logMealFromLib(id) {
+  const meal = state.meals.find(m => m.id === id);
+  if (!meal) return;
+  getDayLog(today()).meals.push({
+    name: meal.name, cal: meal.cal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat
+  });
+  save(); closeModal('addMealModal'); renderToday(); renderNutrition();
+}
+
+function logCustomMeal() {
+  const name = document.getElementById('qName').value || 'Meal';
+  const entry = {
+    name, 
+    cal: parseFloat(document.getElementById('qCal').value)||0,
+    protein: parseFloat(document.getElementById('qP').value)||0,
+    carbs: parseFloat(document.getElementById('qC').value)||0,
+    fat: parseFloat(document.getElementById('qF').value)||0
+  };
+  getDayLog(today()).meals.push(entry);
+  save(); closeModal('addMealModal'); renderToday(); renderNutrition();
+}
+
+// ─── MEAL LIBRARY ────────────────────────────────────────────────────────────
+
+function renderMealLibrary() {
+  const el = document.getElementById('mealLibraryList');
+  if (state.meals.length === 0) {
+    el.innerHTML = '<div class="empty">No meals yet — create your first one</div>';
+    return;
+  }
+  el.innerHTML = state.meals.map(m => `
+    <div class="card">
+      <div class="flex justify-between align-center">
+        <div class="meal-name" style="font-size:1rem">${m.name}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="openMealBuilder('${m.id}')">Edit</button>
+          <button class="delete-btn" onclick="deleteMeal('${m.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="macro-chips mt-8">
+        <span class="chip chip-cal">${m.cal} cal</span>
+        <span class="chip chip-p">${m.protein}g protein</span>
+        <span class="chip chip-c">${m.carbs}g carbs</span>
+        <span class="chip chip-f">${m.fat}g fat</span>
+      </div>
+      <div class="mt-8" style="font-size:0.78rem;color:var(--muted)">
+        ${(m.ingredients||[]).map(i => i.name + ' (' + i.amount + i.unit + ')').join(', ')}
+      </div>
+    </div>`).join('');
+}
+
+function deleteMeal(id) {
+  if (!confirm('Delete this meal?')) return;
+  state.meals = state.meals.filter(m => m.id !== id);
+  save(); renderMealLibrary();
+}
+
+// ─── MEAL BUILDER ────────────────────────────────────────────────────────────
+
+function openMealBuilder(editId) {
+  state.editingMealId = editId || null;
+  const existing = editId ? state.meals.find(m => m.id === editId) : null;
+  state.builderIngredients = existing ? JSON.parse(JSON.stringify(existing.ingredients||[])) : [];
+
+  document.getElementById('mealBuilderTitle').textContent = editId ? 'Edit Meal' : 'Create Meal';
+  renderBuilderContent(existing?.name || '');
+  openModal('mealBuilderModal');
+}
+
+function renderBuilderContent(nameVal) {
+  const totals = calcIngredientTotals();
+  const ingHtml = state.builderIngredients.map((ing,i) => `
+    <div class="ingredient-row">
+      <span>${ing.name} <span style="color:var(--muted)">(${ing.amount}${ing.unit})</span></span>
+      <span style="color:var(--muted);font-size:0.75rem">${Math.round(ing.cal)}cal ${Math.round(ing.p)}P</span>
+      <button class="delete-btn" onclick="removeIngredient(${i})">✕</button>
+    </div>`).join('');
+
+  document.getElementById('mealBuilderContent').innerHTML = `
+    <label>Meal Name</label>
+    <input id="builderName" value="${nameVal}" placeholder="e.g. Chicken Rice Bowl">
+
+    <div class="section-title" style="margin-top:16px">Ingredients</div>
+    <div id="ingredientList">${ingHtml || '<div class="text-muted" style="padding:8px 0">No ingredients added yet</div>'}</div>
+
+    <label>Search Food</label>
+    <input id="foodSearch" placeholder="e.g. chicken, rice, egg..." oninput="searchFoods(this.value)">
+    <div id="foodResults" class="food-search-results" style="display:none"></div>
+
+    <div id="foodAmountRow" style="display:none;margin-top:8px">
+      <div class="flex gap-8 align-center">
+        <div style="flex:1">
+          <label>Amount (<span id="foodUnit"></span>)</label>
+          <input id="foodAmount" type="number" placeholder="100" min="0">
+        </div>
+        <button class="btn btn-primary" style="margin-top:20px" onclick="addIngredient()">Add</button>
+      </div>
+    </div>
+
+    <div class="card mt-16" style="background:var(--bg)">
+      <h3>Meal Totals</h3>
+      <div class="macro-chips">
+        <span class="chip chip-cal">${totals.cal} cal</span>
+        <span class="chip chip-p">${totals.p}g P</span>
+        <span class="chip chip-c">${totals.c}g C</span>
+        <span class="chip chip-f">${totals.f}g F</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary w-full mt-16" onclick="saveMeal()">
+      ${state.editingMealId ? 'Update Meal' : 'Save Meal'}
+    </button>`;
+}
+
+let selectedFood = null;
+
+function searchFoods(q) {
+  const el = document.getElementById('foodResults');
+  if (!q) { el.style.display='none'; return; }
+  const results = FOOD_DB.filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
+  if (results.length === 0) { el.style.display='none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = results.map(f => `
+    <div class="food-result" onclick="selectFood(${JSON.stringify(f).replace(/"/g,'&quot;')})">
+      <span>${f.name}</span>
+      <span style="color:var(--muted)">${f.cal} cal/${f.per}${f.unit}</span>
+    </div>`).join('');
+}
+
+function selectFood(food) {
+  selectedFood = food;
+  document.getElementById('foodSearch').value = food.name;
+  document.getElementById('foodResults').style.display = 'none';
+  document.getElementById('foodUnit').textContent = food.unit;
+  document.getElementById('foodAmount').value = food.per;
+  document.getElementById('foodAmountRow').style.display = 'block';
+}
+
+function addIngredient() {
+  if (!selectedFood) return;
+  const amount = parseFloat(document.getElementById('foodAmount').value) || 0;
+  const ratio = amount / selectedFood.per;
+  state.builderIngredients.push({
+    name: selectedFood.name,
+    amount: amount,
+    unit: selectedFood.unit,
+    cal: selectedFood.cal * ratio,
+    p: selectedFood.p * ratio,
+    c: selectedFood.c * ratio,
+    f: selectedFood.f * ratio
+  });
+  selectedFood = null;
+  document.getElementById('foodSearch').value = '';
+  document.getElementById('foodAmountRow').style.display = 'none';
+  const name = document.getElementById('builderName').value;
+  renderBuilderContent(name);
+}
+
+function removeIngredient(i) {
+  state.builderIngredients.splice(i,1);
+  const name = document.getElementById('builderName').value;
+  renderBuilderContent(name);
+}
+
+function calcIngredientTotals() {
+  let cal=0,p=0,c=0,f=0;
+  state.builderIngredients.forEach(i => { cal+=i.cal||0; p+=i.p||0; c+=i.c||0; f+=i.f||0; });
+  return { cal:Math.round(cal), p:Math.round(p), c:Math.round(c), f:Math.round(f) };
+}
+
+function saveMeal() {
+  const name = document.getElementById('builderName').value.trim();
+  if (!name) { alert('Please enter a meal name'); return; }
+  const tot = calcIngredientTotals();
+  const meal = {
+    id: state.editingMealId || uid(),
+    name, ingredients: state.builderIngredients,
+    cal: tot.cal, protein: tot.p, carbs: tot.c, fat: tot.f
+  };
+  if (state.editingMealId) {
+    const idx = state.meals.findIndex(m => m.id === state.editingMealId);
+    if (idx >= 0) state.meals[idx] = meal;
+  } else {
+    state.meals.push(meal);
+  }
+  save(); closeModal('mealBuilderModal'); renderMealLibrary();
+}
+
+// ─── SHOPPING LIST ────────────────────────────────────────────────────────────
+
+function renderShopping() {
+  const el = document.getElementById('shoppingMealSelect');
+  if (state.meals.length === 0) {
+    el.innerHTML = '<div class="empty">Create meals first in the Meals tab</div>';
+    return;
+  }
+  el.innerHTML = state.meals.map(m => `
+    <div class="shopping-item">
+      <input type="checkbox" id="sm_${m.id}" value="${m.id}">
+      <label for="sm_${m.id}">${m.name} <span style="color:var(--muted)">(${m.cal} cal)</span></label>
+    </div>`).join('');
+}
+
+function generateShoppingList() {
+  const selected = [...document.querySelectorAll('[id^="sm_"]:checked')].map(c => c.value);
+  if (selected.length === 0) { alert('Select at least one meal'); return; }
+
+  const meals = state.meals.filter(m => selected.includes(m.id));
+  const allIngredients = {};
+
+  meals.forEach(meal => {
+    (meal.ingredients||[]).forEach(ing => {
+      const key = ing.name.toLowerCase();
+      if (allIngredients[key]) {
+        allIngredients[key].amount += ing.amount;
+      } else {
+        allIngredients[key] = { name: ing.name, amount: ing.amount, unit: ing.unit };
+      }
+    });
+  });
+
+  const cats = {
+    'Proteins': ['chicken','turkey','salmon','tuna','beef','shrimp','egg','protein powder'],
+    'Dairy': ['yogurt','cottage','milk','cheese'],
+    'Carbs': ['rice','oat','pasta','potato','bread','banana','apple','blueberr','orange'],
+    'Fats & Oils': ['olive oil','almond','avocado','peanut'],
+    'Vegetables': ['broccoli','spinach'],
+    'Other': []
+  };
+
+  const assigned = new Set();
+  let html = '';
+
+  Object.entries(cats).forEach(([cat, keywords]) => {
+    const items = Object.values(allIngredients).filter(ing => {
+      if (assigned.has(ing.name.toLowerCase())) return false;
+      const match = keywords.some(k => ing.name.toLowerCase().includes(k));
+      if (match) assigned.add(ing.name.toLowerCase());
+      return match;
+    });
+    if (items.length === 0 && cat !== 'Other') return;
+
+    // Add uncategorized to Other
+    if (cat === 'Other') {
+      Object.values(allIngredients).forEach(ing => {
+        if (!assigned.has(ing.name.toLowerCase())) items.push(ing);
+      });
+    }
+    if (items.length === 0) return;
+
+    html += `<div class="card"><div class="section-title" style="margin-top:0">${cat}</div>`;
+    html += items.map(ing => {
+      const key = 'shop_' + ing.name.replace(/\s/g,'_');
+      const checked = state.shoppingChecked[key];
+      return `<div class="shopping-item ${checked?'checked':''}" id="si_${key}">
+        <input type="checkbox" id="${key}" ${checked?'checked':''} onchange="toggleShop('${key}')">
+        <label for="${key}">${ing.name} — ${Math.round(ing.amount)} ${ing.unit}</label>
+      </div>`;
+    }).join('');
+    html += '</div>';
+  });
+
+  html += `<button class="btn btn-secondary w-full" onclick="clearShoppingChecks()" style="margin-top:8px">Clear Checks</button>`;
+  document.getElementById('shoppingListOutput').innerHTML = html;
+}
+
+function toggleShop(key) {
+  state.shoppingChecked[key] = !state.shoppingChecked[key];
+  const row = document.getElementById('si_' + key);
+  if (row) row.classList.toggle('checked', state.shoppingChecked[key]);
+  save();
+}
+
+function clearShoppingChecks() {
+  state.shoppingChecked = {};
+  save(); renderShopping();
+  document.getElementById('shoppingListOutput').innerHTML = '';
+}
+
+// ─── MODAL HELPERS ────────────────────────────────────────────────────────────
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+renderToday();
+</script>
+</body>
+</html>
+
